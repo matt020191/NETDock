@@ -91,6 +91,9 @@ public sealed unsafe partial class DockWindow : WindowBase
                 (_outStart, _outEnd, _outEdge, _outAway) = (k.OutLeft * _scale, k.OutRight * _scale, k.OutBottom * _scale, k.OutTop * _scale);
             else
                 (_outStart, _outEnd, _outEdge, _outAway) = (8 * _scale, 8 * _scale, 7 * _scale, 7 * _scale);
+            // Padding grows the panel on both sides of the icons rather than moving them off the rim.
+            _outEdge += Opt.PanelPadding * _scale;
+            _outAway += Opt.PanelPadding * _scale;
             _iconV0 = _shelfV0 + _outEdge;
         }
         _labelH = 24 * _scale;

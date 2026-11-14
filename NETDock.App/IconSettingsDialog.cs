@@ -294,6 +294,9 @@ public sealed unsafe class IconSettingsDialog : WindowBase
 
     // ------------------------------------------------------------ OK / Cancel
 
+    /// <summary>A path field's current text with tokens expanded, or null when empty.</summary>
+    private string? Expanded(int id) => Field(id) is { Length: > 0 } s ? _app.Tokens.Expand(s) : null;
+
     private string Field(int id) => Win32.GetDlgItem(Hwnd, id) is var h and not 0 ? Layout.Text(h) : "";
     private int ComboValue(int id) => Win32.GetDlgItem(Hwnd, id) is var h and not 0 ? Layout.Get(h, Ui.CB_GETCURSEL) : 0;
     private bool Checked(int id) => Win32.GetDlgItem(Hwnd, id) is var h and not 0 && Layout.Checked(h);
@@ -339,7 +342,8 @@ public sealed unsafe class IconSettingsDialog : WindowBase
                     case IdCancel: Win32.DestroyWindow(Hwnd); return 0;
                     case IdDefaultIcon: _iconChanged = true; _pendingIcon = null; UpdatePreview(); return 0;
                     case IdBrowseIcon:
-                        if (Dialogs.PickFile(Hwnd, "Choose an icon", "Icons and images\0*.png;*.ico;*.jpg;*.jpeg;*.bmp;*.exe;*.dll\0All files\0*.*\0") is { } f)
+                        if (Dialogs.PickFile(Hwnd, "Choose an icon", "Icons and images\0*.png;*.ico;*.jpg;*.jpeg;*.bmp;*.exe;*.dll\0All files\0*.*\0",
+                                initial: _pendingIcon ?? (_selectedFolder >= 0 && _selectedFolder < _folders.Count ? _folders[_selectedFolder].Path : null)) is { } f)
                         { _iconChanged = true; _pendingIcon = f; UpdatePreview(); }
                         return 0;
                     case IdAddFolder:
@@ -362,13 +366,14 @@ public sealed unsafe class IconSettingsDialog : WindowBase
                     case IdBrowseTarget:
                         if (IsStack)
                         {
-                            if (Dialogs.PickFolder(Hwnd, "Folder for this stack") is { } sf) Ui.SetWindowText(Win32.GetDlgItem(Hwnd, IdTarget), _app.Tokens.Tokenize(sf)!);
+                            if (Dialogs.PickFolder(Hwnd, "Folder for this stack", Expanded(IdTarget)) is { } sf) Ui.SetWindowText(Win32.GetDlgItem(Hwnd, IdTarget), _app.Tokens.Tokenize(sf)!);
                         }
-                        else if (Dialogs.PickFile(Hwnd, "Target", "All files\0*.*\0", dereferenceLinks: false) is { } tf)
+                        else if (Dialogs.PickFile(Hwnd, "Target", "Programs and shortcuts\0*.exe;*.lnk;*.bat;*.cmd;*.url\0All files\0*.*\0", dereferenceLinks: false, initial: Expanded(IdTarget)) is { } tf)
                             Ui.SetWindowText(Win32.GetDlgItem(Hwnd, IdTarget), _app.Tokens.Tokenize(tf)!);
                         return 0;
                     case IdBrowseDir:
-                        if (Dialogs.PickFolder(Hwnd, "Start in") is { } d) Ui.SetWindowText(Win32.GetDlgItem(Hwnd, IdDir), _app.Tokens.Tokenize(d)!);
+                        // Empty Start in means "the program's folder", so start the browser there.
+                        if (Dialogs.PickFolder(Hwnd, "Start in", Expanded(IdDir) ?? Expanded(IdTarget)) is { } d) Ui.SetWindowText(Win32.GetDlgItem(Hwnd, IdDir), _app.Tokens.Tokenize(d)!);
                         return 0;
                 }
                 break;

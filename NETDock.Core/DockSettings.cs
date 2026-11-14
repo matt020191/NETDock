@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace NETDock.Core;
 
@@ -101,6 +101,8 @@ public sealed class DockOptions
     /// <summary>Gap either side of a separator, in DIPs (RocketDock sets this apart from icon spacing).</summary>
     public int SeparatorSpacing { get; set; } = 8;
     public DockStyle Style { get; set; } = DockStyle.Panel;
+    /// <summary>Extra room above and below the icons inside the background panel, in DIPs.</summary>
+    public int PanelPadding { get; set; } = 4;
     /// <summary>
     /// A RocketDock-format skin folder (background.ini + bg.png, separator.ini + sep.png).
     /// "skins/Name" = copied into the data folder (portable); null = the built-in panel.
@@ -152,6 +154,7 @@ public sealed class DockSettings
         d.MagnifyRange = Math.Clamp(double.IsFinite(d.MagnifyRange) ? d.MagnifyRange : 2.5, 1, 8);
         d.Spacing = Math.Clamp(d.Spacing, 0, 64);
         d.SeparatorSpacing = Math.Clamp(d.SeparatorSpacing, 0, 64);
+        d.PanelPadding = Math.Clamp(d.PanelPadding, 0, 32);
         d.IconOpacity = Math.Clamp(d.IconOpacity, 10, 100);
         d.ZoomDurationMs = Math.Clamp(d.ZoomDurationMs, 30, 1000);
         IconFolders ??= [];

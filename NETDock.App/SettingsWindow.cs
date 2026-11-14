@@ -216,6 +216,7 @@ public sealed unsafe class SettingsWindow : WindowBase
                 var choice = _skins[v - 1];
                 Opt.Skin = choice.Source is { } src ? _app.Store.ImportSkin(src) : choice.Reference;
             });
+        Slider(ref y, "Panel padding (above and below icons)", 0, 16, () => Opt.PanelPadding, v => Opt.PanelPadding = v, v => $"{v}px");
         Check(ref y, "Show labels on hover", () => Opt.ShowLabels, v => Opt.ShowLabels = v);
         Check(ref y, "Show running indicators", () => Opt.ShowRunningIndicators, v => Opt.ShowRunningIndicators = v);
         Check(ref y, "Reflections (platform shelf)", () => Opt.Reflections, v => Opt.Reflections = v);

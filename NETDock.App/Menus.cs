@@ -195,7 +195,7 @@ public static unsafe class Menus
                     case 29: st.ShowHidden = !st.ShowHidden; break;
                     case 30: st.Columns = 0; break;
                     case 39:
-                        if (Dialogs.PickFolder(dock.Hwnd, "Folder to show in this stack") is { } f)
+                        if (Dialogs.PickFolder(dock.Hwnd, "Folder to show in this stack", app.Tokens.Expand(item.Target)) is { } f)
                         {
                             dock.ForgetIcon(item);
                             item.Target = app.Tokens.Tokenize(f)!;
@@ -213,7 +213,8 @@ public static unsafe class Menus
                 SettingsWindow.Show(app);
                 return;
             case 14 when item is not null:
-                if (Dialogs.PickFile(dock.Hwnd, "Choose an icon", "Icons and images\0*.png;*.ico;*.jpg;*.jpeg;*.bmp;*.exe;*.dll\0All files\0*.*\0") is { } file)
+                if (Dialogs.PickFile(dock.Hwnd, "Choose an icon", "Icons and images\0*.png;*.ico;*.jpg;*.jpeg;*.bmp;*.exe;*.dll\0All files\0*.*\0",
+                        initial: app.Store.ResolveDataIcon(item.Icon) ?? app.Store.Location.IconsFolder) is { } file)
                 {
                     dock.ForgetIcon(item);
                     var ext = Path.GetExtension(file).ToLowerInvariant();
@@ -316,9 +317,18 @@ public static unsafe class Menus
 
 public static unsafe class Dialogs
 {
-    public static string? PickFile(nint owner, string title, string filter, bool dereferenceLinks = true)
+    /// <param name="initial">A file or folder to open the dialog at (typically the field's current value).</param>
+    public static string? PickFile(nint owner, string title, string filter, bool dereferenceLinks = true, string? initial = null)
     {
         var buf = new char[2048];
+        // Pre-filling the file box is the reliable way to choose the starting folder: Windows
+        // ignores lpstrInitialDir in favour of the last folder used, once there is one.
+        if (initial is { Length: > 0 and < 2000 })
+        {
+            if (File.Exists(initial)) initial.CopyTo(0, buf, 0, initial.Length);
+            else if (Directory.Exists(initial)) (initial.TrimEnd('\\') + "\\").CopyTo(0, buf, 0, initial.TrimEnd('\\').Length + 1);
+            else if (Path.GetDirectoryName(initial) is { } d && Directory.Exists(d)) (d.TrimEnd('\\') + "\\").CopyTo(0, buf, 0, d.TrimEnd('\\').Length + 1);
+        }
         fixed (char* b = buf) fixed (char* f = filter) fixed (char* t = title)
         {
             var o = new OPENFILENAMEW
@@ -345,12 +355,30 @@ public static unsafe class Dialogs
         }
     }
 
-    public static string? PickFolder(nint owner, string title)
+    /// <summary>Selects <c>lParam</c> (a folder path) once the browse dialog is up.</summary>
+    [System.Runtime.InteropServices.UnmanagedCallersOnly]
+    private static int BrowseCallback(nint hwnd, uint msg, nint lParam, nint data)
+    {
+        if (msg == 1 /* BFFM_INITIALIZED */ && data != 0) Win32.SendMessage(hwnd, 0x467 /* BFFM_SETSELECTIONW */, 1, data);
+        return 0;
+    }
+
+    /// <param name="initial">Folder to start at; a file path starts at its folder.</param>
+    public static string? PickFolder(nint owner, string title, string? initial = null)
     {
         var name = stackalloc char[260];
+        string? start = null;
+        if (initial is { Length: > 0 })
+            start = Directory.Exists(initial) ? initial : Path.GetDirectoryName(initial) is { } d && Directory.Exists(d) ? d : null;
         fixed (char* t = title)
+        fixed (char* st = start)
         {
-            var bi = new BROWSEINFOW { hwndOwner = owner, pszDisplayName = name, lpszTitle = t, ulFlags = 0x1 /* RETURNONLYFSDIRS */ | 0x40 /* NEWDIALOGSTYLE */ };
+            var bi = new BROWSEINFOW
+            {
+                hwndOwner = owner, pszDisplayName = name, lpszTitle = t, ulFlags = 0x1 /* RETURNONLYFSDIRS */ | 0x40 /* NEWDIALOGSTYLE */,
+                lpfn = (nint)(delegate* unmanaged<nint, uint, nint, nint, int>)&BrowseCallback,
+                lParam = start is null ? 0 : (nint)st,
+            };
             var pidl = Win32.SHBrowseForFolder(&bi);
             if (pidl == 0) return null;
             var path = stackalloc char[1024];
