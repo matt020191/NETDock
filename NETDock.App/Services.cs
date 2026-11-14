@@ -111,7 +111,12 @@ public static unsafe class Launcher
         if (dir is null && item.Kind == ItemKind.App && Path.IsPathRooted(target) && File.Exists(target))
             dir = Path.GetDirectoryName(target);
 
-        Start(target, args, dir, elevate || item.RunAsAdmin ? "runas" : null);
+        Start(target, args, dir, elevate || item.RunAsAdmin ? "runas" : null, item.Run switch
+        {
+            RunWindow.Minimized => 7, // SW_SHOWMINNOACTIVE
+            RunWindow.Maximized => 3, // SW_SHOWMAXIMIZED
+            _ => Win32.SW_SHOWNORMAL,
+        });
     }
 
     public static void Open(string path, string? verb = null) => Start(path, null, null, verb);
@@ -119,7 +124,7 @@ public static unsafe class Launcher
     public static void ShowInExplorer(string path) =>
         Start("explorer.exe", $"/select,\"{path}\"", null, null);
 
-    private static void Start(string file, string? args, string? dir, string? verb)
+    private static void Start(string file, string? args, string? dir, string? verb, int show = Win32.SW_SHOWNORMAL)
     {
         // ShellExecute can block on slow handlers; keep it off the UI thread.
         var t = new Thread(() =>
@@ -136,7 +141,7 @@ public static unsafe class Launcher
                     // Zone checks stay on: a downloaded file opened from a stack still gets its Mark-of-the-Web prompt.
                     fMask = 0x00000100 /* SEE_MASK_ASYNCOK */,
                     lpFile = f, lpParameters = args is null ? null : a, lpDirectory = dir is null ? null : d,
-                    lpVerb = verb is null ? null : v, nShow = Win32.SW_SHOWNORMAL,
+                    lpVerb = verb is null ? null : v, nShow = show,
                 };
                 Win32.ShellExecuteEx(&sei);
             }

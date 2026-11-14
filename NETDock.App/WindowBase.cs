@@ -12,7 +12,7 @@ public abstract unsafe class WindowBase
 
     public nint Hwnd { get; private set; }
 
-    protected void Create(string className, uint exStyle, uint style, int x, int y, int w, int h, string? title = null, nint owner = 0)
+    protected void Create(string className, uint exStyle, uint style, int x, int y, int w, int h, string? title = null, nint owner = 0, int sysColor = 15)
     {
         if (Registered.Add(className))
         {
@@ -27,7 +27,7 @@ public abstract unsafe class WindowBase
                     hCursor = Win32.LoadCursor(0, 32512),
                     hIcon = App.AppIcon,
                     hIconSm = App.AppIcon,
-                    hbrBackground = (nint)(15 + 1), // COLOR_BTNFACE + 1
+                    hbrBackground = (nint)(sysColor + 1), // COLOR_xxx + 1: BTNFACE by default, WINDOW (5) for settings
                     lpszClassName = cls,
                 };
                 Win32.RegisterClassEx(&wc);

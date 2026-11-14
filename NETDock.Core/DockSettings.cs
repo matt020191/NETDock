@@ -20,6 +20,12 @@ public enum DockStyle { Panel, Platform }
 
 public enum StackView { Grid, List, Open }
 
+/// <summary>How a launched program's first window opens (ShellExecute nShow).</summary>
+public enum RunWindow { Normal, Minimized, Maximized }
+
+/// <summary>What clicking an item does when its program is already running.</summary>
+public enum OpenRunning { UseGlobal, SwitchTo, NewInstance }
+
 public enum StackSort { Name, DateModified, DateCreated, Kind }
 
 /// <summary>
@@ -73,6 +79,8 @@ public sealed class DockItem
     public string? Icon { get; set; }
 
     public bool RunAsAdmin { get; set; }
+    public RunWindow Run { get; set; }
+    public OpenRunning OpenRunning { get; set; }
 
     public StackOptions? Stack { get; set; }
     public ShortcutFallback? Fallback { get; set; }
@@ -102,6 +110,12 @@ public sealed class DockOptions
     public int EdgeOffset { get; set; } = 4;
     /// <summary>0..1 position of the dock's centre along its edge.</summary>
     public double Centre { get; set; } = 0.5;
+    /// <summary>Icon opacity at rest, 10-100 %.</summary>
+    public int IconOpacity { get; set; } = 100;
+    /// <summary>Magnified icons are drawn fully opaque whatever <see cref="IconOpacity"/> says.</summary>
+    public bool ZoomOpaque { get; set; } = true;
+    /// <summary>Roughly how long icons take to grow or shrink, in ms.</summary>
+    public int ZoomDurationMs { get; set; } = 150;
     public bool AutoHide { get; set; }
     public int AutoHideDelayMs { get; set; } = 600;
     public bool ShowLabels { get; set; } = true;
@@ -126,6 +140,8 @@ public sealed class DockSettings
     public DockOptions Dock { get; set; } = new();
     public List<DockItem> Items { get; set; } = [];
     public bool LaunchAtStartup { get; set; }
+    /// <summary>Extra folders shown in Icon Settings' library (tokenized paths).</summary>
+    public List<string> IconFolders { get; set; } = [];
 
     /// <summary>Clamp every number into a range the renderer can draw, so a hand-edited file can't break it.</summary>
     public DockSettings Sanitize()
@@ -136,6 +152,10 @@ public sealed class DockSettings
         d.MagnifyRange = Math.Clamp(double.IsFinite(d.MagnifyRange) ? d.MagnifyRange : 2.5, 1, 8);
         d.Spacing = Math.Clamp(d.Spacing, 0, 64);
         d.SeparatorSpacing = Math.Clamp(d.SeparatorSpacing, 0, 64);
+        d.IconOpacity = Math.Clamp(d.IconOpacity, 10, 100);
+        d.ZoomDurationMs = Math.Clamp(d.ZoomDurationMs, 30, 1000);
+        IconFolders ??= [];
+        IconFolders.RemoveAll(string.IsNullOrWhiteSpace);
         d.EdgeOffset = Math.Clamp(d.EdgeOffset, 0, 200);
         d.Centre = Math.Clamp(double.IsFinite(d.Centre) ? d.Centre : 0.5, 0, 1);
         d.AutoHideDelayMs = Math.Clamp(d.AutoHideDelayMs, 0, 10_000);
@@ -167,4 +187,6 @@ public sealed class DockSettings
     ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip,
     AllowTrailingCommas = true)]
 [JsonSerializable(typeof(DockSettings))]
+[JsonSerializable(typeof(DockOptions))]
+[JsonSerializable(typeof(DockItem))]
 public sealed partial class SettingsJson : JsonSerializerContext;

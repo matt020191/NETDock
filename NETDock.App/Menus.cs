@@ -12,7 +12,7 @@ public static unsafe class Menus
     private static List<(string Name, string Reference, string? Source)> _skinChoices = [];
 
     /// <summary>Skins already in the data folder, then the installed RocketDock ones (copied in when picked).</summary>
-    private static List<(string Name, string Reference, string? Source)> SkinChoices(App app)
+    public static List<(string Name, string Reference, string? Source)> SkinChoices(App app)
     {
         var list = new List<(string Name, string Reference, string? Source)>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -46,6 +46,8 @@ public static unsafe class Menus
             Win32.AppendMenu(menu, (check ? Win32.MF_CHECKED : 0) | (enabled ? 0 : Win32.MF_GRAYED), id, text);
         void Sep(nint menu) => Win32.AppendMenu(menu, Win32.MF_SEPARATOR, 0, null);
 
+        Add(m, 98, "Dock Settings...");
+        Sep(m);
         if (item is not null && item.Kind != ItemKind.Separator)
         {
             Add(m, 10, item.Kind == ItemKind.Stack ? "Open folder" : "Open");
@@ -76,7 +78,7 @@ public static unsafe class Menus
                 Add(m, 39, "Change folder...");
             }
             Sep(m);
-            Add(m, 13, "Properties...");
+            Add(m, 13, "Icon Settings...");
             Add(m, 14, "Change icon...");
             Add(m, 15, "Use default icon", enabled: item.Icon is not null);
             Add(m, 16, "Remove from dock");
@@ -157,6 +159,9 @@ public static unsafe class Menus
         if (cmd != 0) Run(app, dock, item, index, cmd);
     }
 
+    /// <summary>Run a dock-level menu command (no item) from elsewhere, e.g. the settings window.</summary>
+    public static void Run(App app, uint cmd) => Run(app, app.Dock, null, -1, cmd);
+
     private static void Run(App app, DockWindow dock, DockItem? item, int index, uint cmd)
     {
         var o = app.Settings.Dock;
@@ -202,7 +207,10 @@ public static unsafe class Menus
                 relayout = false;
                 break;
             case 13 when item is not null:
-                ItemDialog.Show(app, item);
+                IconSettingsDialog.Show(app, item);
+                return;
+            case 98:
+                SettingsWindow.Show(app);
                 return;
             case 14 when item is not null:
                 if (Dialogs.PickFile(dock.Hwnd, "Choose an icon", "Icons and images\0*.png;*.ico;*.jpg;*.jpeg;*.bmp;*.exe;*.dll\0All files\0*.*\0") is { } file)

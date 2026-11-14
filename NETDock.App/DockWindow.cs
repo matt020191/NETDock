@@ -375,7 +375,10 @@ public sealed unsafe partial class DockWindow : WindowBase
                 s.SetTransform(D2DMatrix.Identity);
                 s.PopClip();
             }
-            s.DrawBitmap(bmp, rect, i == _down && _dragging < 0 ? 0.7f : 1f);
+            var opacity = Opt.IconOpacity / 100f;
+            if (Opt.ZoomOpaque && _scales[i] > 1.02) opacity += (1 - opacity) * (float)Math.Min(1, (_scales[i] - 1) / 0.25);
+            if (i == _down && _dragging < 0) opacity *= 0.7f;
+            s.DrawBitmap(bmp, rect, opacity);
 
             if (Opt.ShowRunningIndicators && IsRunning(item))
             {
@@ -478,6 +481,9 @@ public sealed unsafe partial class DockWindow : WindowBase
         Win32.SetTimer(Hwnd, AnimTimer, 10, 0);
     }
 
+    /// <summary>Per-tick easing so an icon covers ~95 % of the way in ZoomDurationMs (10 ms ticks).</summary>
+    private double ZoomStep => 1 - Math.Pow(0.05, 10.0 / Math.Max(30, Opt.ZoomDurationMs));
+
     private void Tick()
     {
         var target = TargetScales();
@@ -486,7 +492,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         for (var i = 0; i < target.Length; i++)
         {
             var d = target[i] - _scales[i];
-            if (Math.Abs(d) > 0.002) { _scales[i] += d * 0.32; moving = true; }
+            if (Math.Abs(d) > 0.002) { _scales[i] += d * ZoomStep; moving = true; }
             else _scales[i] = target[i];
         }
         var hideTarget = _hideWanted ? 1.0 : 0.0;
@@ -530,7 +536,13 @@ public sealed unsafe partial class DockWindow : WindowBase
                 else _app.ToggleStack(item, IconScreenRect(index));
                 return;
         }
-        if (!newInstance && !elevate && Opt.ActivateIfRunning && WindowsFor(item) is { Count: > 0 } wins)
+        var switchTo = item.OpenRunning switch
+        {
+            OpenRunning.SwitchTo => true,
+            OpenRunning.NewInstance => false,
+            _ => Opt.ActivateIfRunning,
+        };
+        if (!newInstance && !elevate && switchTo && WindowsFor(item) is { Count: > 0 } wins)
         {
             var fg = Win32.GetForegroundWindow();
             if (wins.Contains(fg)) Win32.ShowWindow(fg, Win32.SW_MINIMIZE);
@@ -741,6 +753,7 @@ public sealed unsafe partial class DockWindow : WindowBase
                 return 0;
         }
         if (msg == App.WM_TRAY) { _app.OnTray(this, (uint)l); return 0; }
+        if (msg == App.WM_COMMAND_LINE) { _app.RunCommandLine(w); return 0; }
         return Default(msg, w, l);
     }
 

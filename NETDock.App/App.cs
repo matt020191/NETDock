@@ -4,7 +4,7 @@ using NETDock.Core;
 
 namespace NETDock.App;
 
-public sealed unsafe class App
+public sealed unsafe partial class App
 {
     public const uint WM_TRAY = Win32.WM_APP + 2;
     public static nint AppIcon { get; private set; }
@@ -28,13 +28,19 @@ public sealed unsafe class App
     public static int Main()
     {
         Win32.CreateMutex(0, true, "NETDock.SingleInstance");
-        if (Win32.GetLastError() == 183 /* ERROR_ALREADY_EXISTS */) return 0;
+        if (Win32.GetLastError() == 183 /* ERROR_ALREADY_EXISTS */)
+        {
+            // Already running: hand "--settings" / "--icon-settings N" to that instance.
+            if (CommandFromArgs() is { } cmd && FindDock() is var dock and not 0) Win32.PostMessage(dock, WM_COMMAND_LINE, cmd, 0);
+            return 0;
+        }
         Win32.OleInitialize(0);
         try
         {
             AppIcon = Win32.LoadImage(Win32.GetModuleHandle(0), 32512, 1, 0, 0, 0x40 /* LR_DEFAULTSIZE */);
             if (AppIcon == 0) AppIcon = Win32.LoadIcon(0, 32512);
             D2D.Init();
+            Ui.Init();
             var app = new App();
             app.Run();
             return 0;
@@ -70,11 +76,14 @@ public sealed unsafe class App
         Dock.Show();
         AddTray();
         if (summary is not null) Win32.MessageBox(Dock.Hwnd, summary, "NETDock", Win32.MB_OK | Win32.MB_ICONINFORMATION);
+        if (CommandFromArgs() is { } startCmd) RunCommandLine(startCmd);
 
         MSG msg;
         while (Win32.GetMessage(&msg, 0, 0, 0) > 0)
         {
-            if (ItemDialog.Current is { } d && Win32.IsDialogMessage(d, &msg)) continue;
+            // Tab / Enter / Esc navigation in the settings windows.
+            if (SettingsWindow.Current is { } sw && Win32.IsDialogMessage(sw.Hwnd, &msg)) continue;
+            if (IconSettingsDialog.Current is { } isd && Win32.IsDialogMessage(isd.Hwnd, &msg)) continue;
             Win32.TranslateMessage(&msg);
             Win32.DispatchMessage(&msg);
         }
@@ -138,6 +147,34 @@ public sealed unsafe class App
             Win32.MessageBox(0, "RocketDock import failed:\n" + ex.Message, "NETDock", Win32.MB_OK | Win32.MB_ICONWARNING);
             return null;
         }
+    }
+
+    // ---------------------------------------------------------------- command line
+
+    public const uint WM_COMMAND_LINE = Win32.WM_APP + 3;
+
+    /// <summary>-1 = Dock Settings; N >= 0 = Icon Settings for item N; null = nothing asked.</summary>
+    private static nint? CommandFromArgs()
+    {
+        var args = Environment.GetCommandLineArgs();
+        for (var i = 1; i < args.Length; i++)
+        {
+            if (args[i].Equals("--settings", StringComparison.OrdinalIgnoreCase)) return -1;
+            if (args[i].Equals("--icon-settings", StringComparison.OrdinalIgnoreCase)
+                && i + 1 < args.Length && int.TryParse(args[i + 1], out var n) && n >= 0) return n;
+        }
+        return null;
+    }
+
+    private static nint FindDock() => FindWindow("NETDock.Dock", null);
+
+    [System.Runtime.InteropServices.LibraryImport("user32.dll", EntryPoint = "FindWindowW", StringMarshalling = System.Runtime.InteropServices.StringMarshalling.Utf16)]
+    private static partial nint FindWindow(string cls, string? title);
+
+    public void RunCommandLine(nint cmd)
+    {
+        if (cmd == -1) SettingsWindow.Show(this);
+        else if (cmd >= 0 && cmd < Settings.Items.Count) IconSettingsDialog.Show(this, Settings.Items[(int)cmd]);
     }
 
     // ---------------------------------------------------------------- tray
