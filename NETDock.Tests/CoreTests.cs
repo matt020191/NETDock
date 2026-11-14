@@ -171,3 +171,27 @@ public class SkinReferenceTests
         Assert.False(Directory.Exists(Path.Combine(dest, "skins-evil")));
     }
 }
+
+public class RecycleBinTests
+{
+    private static DockItem Bin(string? icon = null, string? full = null) => new() { Target = RecycleBin.Target, Icon = icon, IconFull = full };
+
+    [Fact]
+    public void Default_bin_switches_between_windows_empty_and_full_icons()
+    {
+        Assert.Equal(RecycleBin.EmptyIcon, RecycleBin.IconFor(Bin(), full: false));
+        Assert.Equal(RecycleBin.FullIcon, RecycleBin.IconFor(Bin(), full: true));
+        Assert.Equal(RecycleBin.FullIcon, RecycleBin.IconFor(Bin(@"%systemroot%\system32\imageres.dll,-55"), full: true));
+    }
+
+    [Fact]
+    public void Custom_icons_are_respected()
+    {
+        Assert.Equal("icons/full.png", RecycleBin.IconFor(Bin("icons/empty.png", "icons/full.png"), full: true));
+        Assert.Equal("icons/mine.png", RecycleBin.IconFor(Bin("icons/mine.png"), full: true));
+    }
+
+    [Fact]
+    public void Only_the_bin_target_counts() =>
+        Assert.False(RecycleBin.Is(new DockItem { Target = @"%SystemRoot%\explorer.exe" }));
+}

@@ -151,6 +151,65 @@ public static unsafe class Launcher
     }
 }
 
+/// <summary>
+/// Watches whether the Recycle Bin has anything in it (polled off the UI thread, since the
+/// query can be slow on big drives) and recycles dropped files through the shell.
+/// </summary>
+public static unsafe class RecycleBinService
+{
+    public const uint WM_BIN_CHANGED = Win32.WM_APP + 4;
+    private static Timer? _timer;
+    private static int _full = -1;
+    private static nint _notify;
+
+    public static bool IsFull => _full == 1;
+
+    public static void Start(nint notifyHwnd)
+    {
+        _notify = notifyHwnd;
+        _timer = new Timer(_ => Poll(), null, 0, 2000);
+    }
+
+    public static void Poll()
+    {
+        var info = new SHQUERYRBINFO { cbSize = (uint)sizeof(SHQUERYRBINFO) };
+        if (Win32.SHQueryRecycleBin(null, &info) < 0) return;
+        var full = info.i64NumItems > 0 ? 1 : 0;
+        if (Interlocked.Exchange(ref _full, full) != full) Win32.PostMessage(_notify, WM_BIN_CHANGED, 0, 0);
+    }
+
+    /// <summary>Send files to the Recycle Bin, with the shell's usual confirmation and progress UI.</summary>
+    public static void Recycle(nint owner, IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0) return;
+        var from = string.Join('\0', paths) + "\0\0"; // double-null-terminated list
+        var t = new Thread(() =>
+        {
+            Win32.CoInitializeEx(0, 2);
+            fixed (char* f = from)
+            {
+                var op = new SHFILEOPSTRUCTW { hwnd = owner, wFunc = 3 /* FO_DELETE */, pFrom = f, fFlags = 0x40 /* FOF_ALLOWUNDO: recycle */ };
+                Win32.SHFileOperation(&op);
+            }
+            Poll();
+        }) { IsBackground = true };
+        t.SetApartmentState(ApartmentState.STA);
+        t.Start();
+    }
+
+    public static void Empty(nint owner)
+    {
+        var t = new Thread(() =>
+        {
+            Win32.CoInitializeEx(0, 2);
+            Win32.SHEmptyRecycleBin(owner, null, 0); // shell asks for confirmation
+            Poll();
+        }) { IsBackground = true };
+        t.SetApartmentState(ApartmentState.STA);
+        t.Start();
+    }
+}
+
 /// <summary>Top-level windows grouped by process image, for running indicators and click-to-activate.</summary>
 public static unsafe class RunningApps
 {

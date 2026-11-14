@@ -52,7 +52,8 @@ public static unsafe class Menus
         {
             Add(m, 10, item.Kind == ItemKind.Stack ? "Open folder" : "Open");
             if (item.Kind != ItemKind.Stack) Add(m, 11, "Run as administrator");
-            Add(m, 12, "Open file location");
+            if (RecycleBin.Is(item)) Add(m, 17, "Empty Recycle Bin", enabled: RecycleBinService.IsFull);
+            else Add(m, 12, "Open file location");
             if (item.Kind == ItemKind.Stack)
             {
                 var st = item.Stack ??= new StackOptions();
@@ -224,6 +225,7 @@ public static unsafe class Menus
                 break;
             case 15 when item is not null: dock.ForgetIcon(item); item.Icon = null; break;
             case 16 when item is not null: app.Settings.Items.Remove(item); break;
+            case 17: RecycleBinService.Empty(dock.Hwnd); return;
             case 40: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), new DockItem { Kind = ItemKind.Separator }); break;
             case 41:
                 if (Dialogs.PickFolder(dock.Hwnd, "Folder to show as a stack") is { } folder && ItemFactory.FromPath(folder, app.Tokens) is { } s)

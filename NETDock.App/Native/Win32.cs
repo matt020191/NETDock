@@ -97,8 +97,22 @@ public unsafe struct WIN32_FIND_DATAW
     public fixed char cAlternateFileName[14];
 }
 
+[StructLayout(LayoutKind.Sequential)]
+public struct SHQUERYRBINFO { public uint cbSize; public long i64Size, i64NumItems; }
+
+[StructLayout(LayoutKind.Sequential)]
+public unsafe struct SHFILEOPSTRUCTW
+{
+    public nint hwnd; public uint wFunc; public char* pFrom, pTo; public ushort fFlags;
+    public int fAnyOperationsAborted; public nint hNameMappings; public char* lpszProgressTitle;
+}
+
 public static unsafe partial class Win32
 {
+    [LibraryImport("shell32.dll", EntryPoint = "SHQueryRecycleBinW")] public static partial int SHQueryRecycleBin(char* root, SHQUERYRBINFO* info);
+    [LibraryImport("shell32.dll", EntryPoint = "SHEmptyRecycleBinW")] public static partial int SHEmptyRecycleBin(nint hwnd, char* root, uint flags);
+    [LibraryImport("shell32.dll", EntryPoint = "SHFileOperationW")] public static partial int SHFileOperation(SHFILEOPSTRUCTW* op);
+
     public const uint WS_POPUP = 0x80000000, WS_VISIBLE = 0x10000000, WS_CAPTION = 0x00C00000, WS_SYSMENU = 0x00080000,
         WS_CHILD = 0x40000000, WS_TABSTOP = 0x00010000, WS_BORDER = 0x00800000;
     public const uint WS_EX_LAYERED = 0x80000, WS_EX_TOOLWINDOW = 0x80, WS_EX_TOPMOST = 0x8, WS_EX_NOACTIVATE = 0x08000000,

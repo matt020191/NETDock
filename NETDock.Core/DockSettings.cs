@@ -78,6 +78,9 @@ public sealed class DockItem
     /// </summary>
     public string? Icon { get; set; }
 
+    /// <summary>Recycle Bin only: icon while it has something in it (RocketDock's FileName2).</summary>
+    public string? IconFull { get; set; }
+
     public bool RunAsAdmin { get; set; }
     public RunWindow Run { get; set; }
     public OpenRunning OpenRunning { get; set; }

@@ -64,6 +64,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         _shellHookMsg = Win32.RegisterWindowMessage("SHELLHOOK");
         Win32.RegisterShellHookWindow(Hwnd);
         Win32.SetTimer(Hwnd, RunningTimer, 3000, 0); // backstop for windows the hook misses
+        RecycleBinService.Start(Hwnd);
         Relayout();
         RefreshRunning();
         Win32.ShowWindow(Hwnd, Win32.SW_SHOWNOACTIVATE);
@@ -456,6 +457,8 @@ public sealed unsafe partial class DockWindow : WindowBase
 
     private nint Bitmap(DockItem item)
     {
+        if (RecycleBin.Is(item))
+            item = new DockItem { Kind = item.Kind, Target = item.Target, Icon = RecycleBin.IconFor(item, RecycleBinService.IsFull) };
         var size = IconPixelSize();
         var key = IconService.KeyFor(item, size);
         if (_bitmaps.TryGetValue(key, out var bmp)) return bmp;
@@ -647,8 +650,20 @@ public sealed unsafe partial class DockWindow : WindowBase
     {
         POINT pt;
         DragQueryPoint(hdrop, &pt);
-        var (u, _) = ToEdge(pt.X, pt.Y);
+        var (u, v) = ToEdge(pt.X, pt.Y);
         var count = Win32.DragQueryFile(hdrop, 0xFFFFFFFF, null, 0);
+        if (HitTest(u, v) is var target and >= 0 && RecycleBin.Is(Items[target]))
+        {
+            var paths = new List<string>();
+            var pbuf = stackalloc char[2048];
+            for (uint i = 0; i < count; i++)
+                paths.Add(new string(pbuf, 0, (int)Win32.DragQueryFile(hdrop, i, pbuf, 2048)));
+            Win32.DragFinish(hdrop);
+            RecycleBinService.Recycle(Hwnd, paths);
+            _bounces[Items[target].Id] = Environment.TickCount64;
+            Kick();
+            return;
+        }
         var at = Items.Count == 0 ? 0 : Math.Clamp(InsertIndex(u) + (u > _u0[^1] + _len[^1] / 2 ? 1 : 0), 0, Items.Count);
         var buf = stackalloc char[2048];
         for (uint i = 0; i < count; i++)
@@ -741,6 +756,9 @@ public sealed unsafe partial class DockWindow : WindowBase
                 return 0;
             case IconService.WM_ICONS_READY:
                 _app.Icons.Acknowledge();
+                Render();
+                return 0;
+            case RecycleBinService.WM_BIN_CHANGED:
                 Render();
                 return 0;
             case Win32.WM_DISPLAYCHANGE:

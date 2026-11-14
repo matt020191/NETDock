@@ -84,7 +84,7 @@ public sealed class RocketDockImport(PathTokens tokens, Func<string, bool> exist
             var dock = new DockItem { Kind = ItemKind.App, Name = title };
 
             if (command.Equals("[RecycleBin]", StringComparison.OrdinalIgnoreCase))
-                command = "::{645FF040-5081-101B-9F08-00AA002F954E}";
+                command = RecycleBin.Target;
 
             if (command.StartsWith("::", StringComparison.Ordinal))
             {
@@ -109,6 +109,8 @@ public sealed class RocketDockImport(PathTokens tokens, Func<string, bool> exist
             var args = V("Arguments");
             if (args.Length > 0) dock.Arguments = args;
             dock.Icon = MapIcon(iconFile, dock.Target, rocketDockFolder, copies);
+            if (RecycleBin.Is(dock) && V("FileName2") is { Length: > 0 } full)
+                dock.IconFull = MapIcon(full, dock.Target, rocketDockFolder, copies);
             settings.Items.Add(dock);
         }
         string? skin = null;
