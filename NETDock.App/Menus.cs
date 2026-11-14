@@ -6,7 +6,27 @@ namespace NETDock.App;
 /// <summary>Native popup menus: the item menu (right-click an icon) and the dock menu.</summary>
 public static unsafe class Menus
 {
-    private static readonly int[] IconSizes = [32, 40, 48, 56, 64, 72, 80, 96, 128];
+    private static readonly int[] IconSizes = [32, 40, 44, 48, 56, 64, 72, 80, 96, 128];
+    private static readonly int[] Spacings = [0, 2, 4, 6, 8, 12];
+    private static List<(string Name, string Reference, string? Source)> _skinChoices = [];
+
+    /// <summary>Skins already in the data folder, then the installed RocketDock ones (copied in when picked).</summary>
+    private static List<(string Name, string Reference, string? Source)> SkinChoices(App app)
+    {
+        var list = new List<(string Name, string Reference, string? Source)>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var own = Path.Combine(app.Store.Location.Folder, "skins");
+        if (Directory.Exists(own))
+            foreach (var d in Directory.EnumerateDirectories(own).Order())
+                if (File.Exists(Path.Combine(d, "background.ini")) && seen.Add(Path.GetFileName(d)))
+                    list.Add((Path.GetFileName(d), "skins/" + Path.GetFileName(d), null));
+        if (RocketDockConfig.Folder() is { } rd && Directory.Exists(Path.Combine(rd, "Skins")))
+            foreach (var d in Directory.EnumerateDirectories(Path.Combine(rd, "Skins")).Order())
+                if (File.Exists(Path.Combine(d, "background.ini")) && seen.Add(Path.GetFileName(d)))
+                    list.Add((Path.GetFileName(d) + "  (RocketDock)", "skins/" + Path.GetFileName(d), d));
+        return list;
+    }
+
     private static readonly int[] ZoomSizes = [64, 80, 96, 112, 128, 160, 192, 256];
 
     public static void ShowDockMenu(App app, DockWindow dock, DockItem? item, int index, POINT at)
@@ -88,10 +108,22 @@ public static unsafe class Menus
 
         var size = Sub("Icon size");
         for (var i = 0; i < IconSizes.Length; i++) Add(size, (uint)(100 + i), $"{IconSizes[i]} px", o.IconSize == IconSizes[i]);
+        var gap = Sub("Icon spacing");
+        for (var i = 0; i < Spacings.Length; i++) Add(gap, (uint)(160 + i), Spacings[i] == 0 ? "None" : $"{Spacings[i]} px", o.Spacing == Spacings[i]);
         var zoom = Sub("Zoom size");
         Add(zoom, 70, "Magnify on hover", o.Magnify);
         Sep(zoom);
         for (var i = 0; i < ZoomSizes.Length; i++) Add(zoom, (uint)(120 + i), $"{ZoomSizes[i]} px", o.MagnifiedSize == ZoomSizes[i], ZoomSizes[i] >= o.IconSize);
+
+        var style = Sub("Style");
+        Add(style, 140, "Background panel (RocketDock)", o.Style == DockStyle.Panel);
+        Add(style, 141, "Platform shelf (macOS)", o.Style == DockStyle.Platform);
+        Sep(style);
+        var skins = SkinChoices(app);
+        Add(style, 210, "Built-in panel", o.Style == DockStyle.Panel && o.Skin is null, o.Style == DockStyle.Panel);
+        for (var i = 0; i < skins.Count && i < 80; i++)
+            Add(style, (uint)(211 + i), skins[i].Name, o.Skin == skins[i].Reference, o.Style == DockStyle.Panel);
+        _skinChoices = skins;
 
         var view2 = Sub("Options");
         Add(view2, 80, "Show labels", o.ShowLabels);
@@ -196,6 +228,17 @@ public static unsafe class Menus
             case >= 100 and < 110: o.IconSize = IconSizes[cmd - 100]; o.MagnifiedSize = Math.Max(o.MagnifiedSize, o.IconSize); break;
             case 70: o.Magnify = !o.Magnify; break;
             case >= 120 and < 130: o.MagnifiedSize = ZoomSizes[cmd - 120]; o.Magnify = true; break;
+            case 140: o.Style = DockStyle.Panel; break;
+            case 141: o.Style = DockStyle.Platform; break;
+            case 210: o.Skin = null; break;
+            case >= 211 and < 291 when cmd - 211 < _skinChoices.Count:
+            {
+                var choice = _skinChoices[(int)cmd - 211];
+                // Copied into the data folder, so the look travels with a portable dock or backup.
+                o.Skin = choice.Source is { } src ? app.Store.ImportSkin(src) : choice.Reference;
+                break;
+            }
+            case >= 160 and < 170 when cmd - 160 < Spacings.Length: o.Spacing = Spacings[cmd - 160]; break;
             case 80: o.ShowLabels = !o.ShowLabels; break;
             case 81: o.Reflections = !o.Reflections; break;
             case 82: o.ShowRunningIndicators = !o.ShowRunningIndicators; break;
@@ -246,7 +289,7 @@ public static unsafe class Menus
             File.Copy(app.Store.Location.SettingsFile, Path.Combine(data, "settings.json"), overwrite: true);
             if (Directory.Exists(app.Store.Location.IconsFolder))
                 foreach (var f in Directory.EnumerateFiles(app.Store.Location.IconsFolder))
-                    File.Copy(f, Path.Combine(data, "icons", Path.GetFileName(f)), overwrite: true);
+                    SettingsStore.CopyOver(f, Path.Combine(data, "icons", Path.GetFileName(f)));
             Win32.MessageBox(dock.Hwnd,
                 $"Settings and icons copied to\n{data}\n\nNETDock will use that folder from its next start. Copy the whole NETDock folder to move your dock to another PC.",
                 "NETDock", Win32.MB_OK | Win32.MB_ICONINFORMATION);

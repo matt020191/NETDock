@@ -26,6 +26,14 @@ public sealed unsafe partial class DockWindow : WindowBase
     private int _thickness, _length;
     private float _base, _max, _pad, _spacing, _shelfV0, _shelfThick, _iconV0, _labelH;
 
+    // Panel style: how far the background reaches past the icons (along the row, at the
+    // screen-edge side, and on the side away from the edge), in pixels.
+    private float _outStart, _outEnd, _outEdge, _outAway;
+    private Skin? _skin;
+    private nint _skinBg, _skinSep;
+    private int _skinBgW, _skinBgH, _skinSepW, _skinSepH, _skinL, _skinR;
+    private bool Panel => Opt.Style == DockStyle.Panel;
+
     // state
     private double[] _scales = [];
     private float[] _u0 = [], _len = [];
@@ -75,6 +83,15 @@ public sealed unsafe partial class DockWindow : WindowBase
         _shelfV0 = Opt.EdgeOffset * _scale;
         _shelfThick = _base * 0.45f + _pad;
         _iconV0 = _shelfV0 + _pad * 1.4f;
+        LoadSkin();
+        if (Panel)
+        {
+            if (_skin is { } k)
+                (_outStart, _outEnd, _outEdge, _outAway) = (k.OutLeft * _scale, k.OutRight * _scale, k.OutBottom * _scale, k.OutTop * _scale);
+            else
+                (_outStart, _outEnd, _outEdge, _outAway) = (8 * _scale, 8 * _scale, 7 * _scale, 7 * _scale);
+            _iconV0 = _shelfV0 + _outEdge;
+        }
         _labelH = 24 * _scale;
 
         if (_labelFormat != 0) Com.Release(ref _labelFormat);
@@ -125,7 +142,84 @@ public sealed unsafe partial class DockWindow : WindowBase
         _ => (x, _thickness - y),
     };
 
-    private float RestLength(DockItem i) => i.Kind == ItemKind.Separator ? _base * 0.3f : _base;
+    private float RestLength(DockItem i) => i.Kind != ItemKind.Separator ? _base
+        : Panel && _skinSep != 0 ? Math.Max(4 * _scale, _skinSepW * _scale) : _base * 0.3f;
+
+    private void LoadSkin()
+    {
+        Com.Release(ref _skinBg);
+        Com.Release(ref _skinSep);
+        _skin = null;
+        if (!Panel || _app.Store.ResolveSkin(_app.Tokens.Expand(Opt.Skin)) is not { } folder) return;
+        _skin = Skin.Load(folder, f => File.Exists(f) ? File.ReadAllText(f) : null);
+        if (_skin is null) return;
+        (_skinBg, _skinBgW, _skinBgH) = LoadImage(_skin.Background, out var bgPixels);
+        if (bgPixels is not null) (_skinL, _, _skinR, _) = Skin.StretchMargins(bgPixels, _skinBgW, _skinBgH, _skin.Left, _skin.Top, _skin.Right, _skin.Bottom);
+        if (_skin.Separator is { } sep) (_skinSep, _skinSepW, _skinSepH) = LoadImage(sep);
+        if (_skinBg == 0) _skin = null;
+    }
+
+    /// <summary>A skin image at its native size (the Shell thumbnailer decodes the PNG).</summary>
+    private (nint Bitmap, int W, int H) LoadImage(string file) => LoadImage(file, out _);
+
+    private (nint Bitmap, int W, int H) LoadImage(string file, out byte[]? pixels)
+    {
+        pixels = null;
+        if (!File.Exists(file)) return (0, 0, 0);
+        var head = new byte[24];
+        using (var fs = File.OpenRead(file)) fs.ReadExactly(head);
+        var native = Skin.PngSize(head);
+        var img = Shell.ShellImage(file, native is { } n ? Math.Max(n.W, n.H) : 256, preferThumbnail: true);
+        if (img is null) return (0, 0, 0);
+        // Slice margins are in source pixels; use what was actually decoded.
+        pixels = img.Bgra;
+        return (_surface.CreateBitmap(img.Bgra, img.Width, img.Height), img.Width, img.Height);
+    }
+
+    /// <summary>Stretch a 9-slice image over dest: corners fixed, edges and centre stretched.</summary>
+    private void NineSlice(nint bmp, int iw, int ih, D2DRect dest, int l, int t, int r, int b)
+    {
+        float sl = l * _scale, st = t * _scale, sr = r * _scale, sb = b * _scale;
+        float[] dx = [dest.L, dest.L + sl, dest.R - sr, dest.R];
+        float[] dy = [dest.T, dest.T + st, dest.B - sb, dest.B];
+        float[] sx = [0, l, iw - r, iw];
+        float[] sy = [0, t, ih - b, ih];
+        for (var yi = 0; yi < 3; yi++)
+        for (var xi = 0; xi < 3; xi++)
+        {
+            if (dx[xi + 1] <= dx[xi] || dy[yi + 1] <= dy[yi] || sx[xi + 1] <= sx[xi] || sy[yi + 1] <= sy[yi]) continue;
+            _surface.DrawBitmap(bmp, new D2DRect(dx[xi], dy[yi], dx[xi + 1], dy[yi + 1]), 1,
+                new D2DRect(sx[xi], sy[yi], sx[xi + 1], sy[yi + 1]));
+        }
+    }
+
+    /// <summary>The RocketDock look: a background that wraps the icons at rest size.</summary>
+    private D2DRect DrawPanel(float rowStart, float rowEnd, float off)
+    {
+        var r = ToWindow(rowStart - _outStart, rowEnd + _outEnd, _shelfV0 - off, _iconV0 + _base + _outAway - off);
+        if (_skin is { } k && _skinBg != 0)
+        {
+            // Skins are drawn for a bottom dock; like RocketDock, mirror them on the top edge
+            // so the lit side still faces away from the screen edge.
+            if (Opt.Edge == DockEdge.Top)
+            {
+                _surface.SetTransform(D2DMatrix.FlipY((r.T + r.B) / 2));
+                NineSlice(_skinBg, _skinBgW, _skinBgH, r, _skinL, k.Top, _skinR, k.Bottom);
+                _surface.SetTransform(D2DMatrix.Identity);
+            }
+            else NineSlice(_skinBg, _skinBgW, _skinBgH, r, _skinL, k.Top, _skinR, k.Bottom);
+            return r;
+        }
+        // Built-in: dark smoked glass, lighter at the top, thin light rim (close to CrystalXP).
+        var radius = 7 * _scale;
+        _surface.FillRoundRect(r, radius, new D2DColor(0.09f, 0.1f, 0.12f, 0.82f));
+        LayeredSurface.SetGradientLine(_shelfBrush, new D2DPoint(r.L, r.T), new D2DPoint(r.L, r.B));
+        _surface.FillRoundRect(r, radius, default, _shelfBrush, setColor: false);
+        _surface.DrawRoundRect(r, radius, new D2DColor(1, 1, 1, 0.45f), 1 * _scale);
+        var inner = new D2DRect(r.L + 1.5f * _scale, r.T + 1.5f * _scale, r.R - 1.5f * _scale, r.B - 1.5f * _scale);
+        _surface.DrawRoundRect(inner, radius - 1, new D2DColor(0, 0, 0, 0.35f), 1 * _scale);
+        return r;
+    }
 
     /// <summary>Target scales for the current cursor, worked out on the un-magnified row.</summary>
     private double[] TargetScales()
@@ -206,6 +300,9 @@ public sealed unsafe partial class DockWindow : WindowBase
         else
             s.FillRect(ToWindow(rowStart - _pad * 2, rowEnd + _pad * 2, 0, _iconV0 + maxLen + _pad - off), catcher);
 
+        if (Panel) DrawPanel(rowStart, rowEnd, off);
+        else
+        {
         // Shelf
         var shelfC = D2DColor.Parse(Opt.ShelfColor, 0x70182030);
         var shelf = ToWindow(rowStart - _pad * 2, rowEnd + _pad * 2, _shelfV0 - off, _shelfV0 + _shelfThick - off);
@@ -216,6 +313,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         LayeredSurface.SetGradientLine(_shelfBrush, gradTop, gradBot);
         s.FillRoundRect(shelf, radius, default, _shelfBrush, setColor: false);
         s.DrawRoundRect(shelf, radius, D2DColor.Parse(Opt.ShelfBorderColor, 0x90FFFFFF).WithAlpha(0.8f), 1 * _scale);
+        }
 
         var now = Environment.TickCount64;
         var indicator = D2DColor.Parse(Opt.IndicatorColor, 0xFFBFE4FF);
@@ -226,6 +324,15 @@ public sealed unsafe partial class DockWindow : WindowBase
             if (item.Kind == ItemKind.Separator)
             {
                 var mid = _u0[i] + _len[i] / 2;
+                if (Panel)
+                {
+                    float sv0 = _shelfV0 + _outEdge * 0.4f - off, sv1 = _iconV0 + _base + _outAway * 0.6f - off;
+                    if (_skinSep != 0 && _skin is { } k)
+                        s.DrawBitmap(_skinSep, ToWindow(_u0[i], _u0[i] + _len[i], sv0 + k.SepBottom * _scale, sv1 - k.SepTop * _scale), 1);
+                    else
+                        s.FillRect(ToWindow(mid - 0.5f * _scale, mid + 0.5f * _scale, sv0, sv1), new D2DColor(1, 1, 1, 0.3f));
+                    continue;
+                }
                 var a = ToWindow(mid - _scale, mid + _scale, _shelfV0 + _pad * 0.5f - off, _shelfV0 + _shelfThick - _pad * 0.5f - off);
                 s.FillRect(a, new D2DColor(1, 1, 1, 0.35f));
                 continue;
@@ -239,7 +346,7 @@ public sealed unsafe partial class DockWindow : WindowBase
                 s.FillRoundRect(rect, _len[i] * 0.2f, new D2DColor(1, 1, 1, 0.12f));
                 continue;
             }
-            if (Opt.Reflections && Opt.Edge == DockEdge.Bottom && bounce < 1)
+            if (!Panel && Opt.Reflections && Opt.Edge == DockEdge.Bottom && bounce < 1)
             {
                 // Mirror about the icon's base, clipped to the shelf below it.
                 var clip = ToWindow(_u0[i], _u0[i] + _len[i], _shelfV0 - off, v0);
@@ -254,7 +361,8 @@ public sealed unsafe partial class DockWindow : WindowBase
             if (Opt.ShowRunningIndicators && IsRunning(item))
             {
                 var c = _u0[i] + _len[i] / 2;
-                var dot = ToWindow(c, c, _shelfV0 + _pad * 0.7f - off, _shelfV0 + _pad * 0.7f - off);
+                var dv = (Panel ? _iconV0 - 2.5f * _scale : _shelfV0 + _pad * 0.7f) - off; // panel: just inside the rim, under the icon
+                var dot = ToWindow(c, c, dv, dv);
                 s.FillEllipse(dot.L, dot.T, 5 * _scale, 5 * _scale, indicator.WithAlpha(0.25f));
                 s.FillEllipse(dot.L, dot.T, 2.2f * _scale, 2.2f * _scale, indicator);
             }

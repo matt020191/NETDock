@@ -133,7 +133,8 @@ public static unsafe class Launcher
                 var sei = new SHELLEXECUTEINFOW
                 {
                     cbSize = (uint)sizeof(SHELLEXECUTEINFOW),
-                    fMask = 0x00000100 /* SEE_MASK_ASYNCOK */ | 0x00008000 /* SEE_MASK_NOZONECHECKS */,
+                    // Zone checks stay on: a downloaded file opened from a stack still gets its Mark-of-the-Web prompt.
+                    fMask = 0x00000100 /* SEE_MASK_ASYNCOK */,
                     lpFile = f, lpParameters = args is null ? null : a, lpDirectory = dir is null ? null : d,
                     lpVerb = verb is null ? null : v, nShow = Win32.SW_SHOWNORMAL,
                 };

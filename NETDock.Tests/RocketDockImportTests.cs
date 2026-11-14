@@ -65,3 +65,40 @@ public class RocketDockImportTests
         Assert.Equal(0, d.Monitor);
     }
 }
+
+public class SkinTests
+{
+    [Fact]
+    public void Parses_rocketdock_background_and_separator_ini()
+    {
+        var files = new Dictionary<string, string>
+        {
+            [Path.Combine("S", "background.ini")] = "[Background]\nImage        = bg.png\nLeftMargin   = 8\nTopMargin    = 8\nRightMargin  = 8\nBottomMargin = 8\nOutside-LeftMargin   = 20\nOutside-TopMargin    = 13\nOutside-RightMargin  = 23\nOutside-BottomMargin = 10\n",
+            [Path.Combine("S", "separator.ini")] = "[Separator]\nImage =\t\tsep.png\nTopMargin =\t\t0\nBottomMargin =\t0\n",
+        };
+        var s = Skin.Load("S", p => files.GetValueOrDefault(p))!;
+        Assert.Equal(Path.Combine("S", "bg.png"), s.Background);
+        Assert.Equal((8, 8, 8, 8), (s.Left, s.Top, s.Right, s.Bottom));
+        Assert.Equal((20, 13, 23, 10), (s.OutLeft, s.OutTop, s.OutRight, s.OutBottom));
+        Assert.Equal(Path.Combine("S", "sep.png"), s.Separator);
+    }
+}
+
+public class StretchMarginTests
+{
+    [Fact]
+    public void Grows_declared_margin_past_a_wide_corner()
+    {
+        // 40x4 image: columns 0-11 and 28-39 vary (corner), 12-27 are uniform.
+        const int w = 40, h = 4;
+        var px = new byte[w * h * 4];
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var edge = Math.Min(x, w - 1 - x);
+            px[(y * w + x) * 4 + 3] = (byte)(edge < 12 ? edge * 10 : 200);
+        }
+        var (l, t, r, b) = Skin.StretchMargins(px, w, h, 4, 2, 4, 1);
+        Assert.Equal((12, 2, 12, 1), (l, t, r, b));
+    }
+}

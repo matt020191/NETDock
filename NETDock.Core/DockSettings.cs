@@ -15,6 +15,9 @@ public enum ItemKind
     Separator,
 }
 
+/// <summary>Platform: icons stand on a shelf (macOS). Panel: a background wraps the icons (RocketDock).</summary>
+public enum DockStyle { Panel, Platform }
+
 public enum StackView { Grid, List, Open }
 
 public enum StackSort { Name, DateModified, DateCreated, Kind }
@@ -85,7 +88,14 @@ public sealed class DockOptions
     public int MagnifiedSize { get; set; } = 96;
     /// <summary>How many icons either side of the cursor grow.</summary>
     public double MagnifyRange { get; set; } = 2.5;
-    public int Spacing { get; set; } = 8;
+    /// <summary>Gap between icons at rest, in DIPs. RocketDock packs icons almost edge to edge.</summary>
+    public int Spacing { get; set; } = 2;
+    public DockStyle Style { get; set; } = DockStyle.Panel;
+    /// <summary>
+    /// A RocketDock-format skin folder (background.ini + bg.png, separator.ini + sep.png).
+    /// "skins/Name" = copied into the data folder (portable); null = the built-in panel.
+    /// </summary>
+    public string? Skin { get; set; }
     /// <summary>Gap between the dock and the screen edge, in DIPs.</summary>
     public int EdgeOffset { get; set; } = 4;
     /// <summary>0..1 position of the dock's centre along its edge.</summary>
@@ -127,6 +137,9 @@ public sealed class DockSettings
         d.Centre = Math.Clamp(double.IsFinite(d.Centre) ? d.Centre : 0.5, 0, 1);
         d.AutoHideDelayMs = Math.Clamp(d.AutoHideDelayMs, 0, 10_000);
         d.Monitor = Math.Max(0, d.Monitor);
+        // A skin is only ever a copy inside the data folder; anything else (absolute, UNC,
+        // "..") from a hand-edited or imported file falls back to the built-in panel.
+        if (!SettingsStore.IsDataReference(d.Skin, "skins/")) d.Skin = null;
         Items ??= [];
         Items.RemoveAll(i => i is null);
         foreach (var i in Items)

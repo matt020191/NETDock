@@ -123,8 +123,9 @@ public sealed unsafe class App
             var (result, folder) = RocketDockConfig.Read(Tokens);
             Directory.CreateDirectory(Store.Location.IconsFolder);
             foreach (var (src, name) in result.IconFilesToCopy)
-                File.Copy(src, Path.Combine(Store.Location.IconsFolder, name), overwrite: true);
+                SettingsStore.CopyOver(src, Path.Combine(Store.Location.IconsFolder, name));
             if (replace) Settings = result.Settings;
+            if (replace && result.SkinFolder is { } skin) Settings.Dock.Skin = Store.ImportSkin(skin);
             else Settings.Items.AddRange(result.Settings.Items);
             Settings.Sanitize();
             var msg = $"Imported {result.Settings.Items.Count} items from RocketDock ({folder}).";

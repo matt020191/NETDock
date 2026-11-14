@@ -17,7 +17,8 @@ namespace NETDock.Core;
 /// </summary>
 public sealed class RocketDockImport(PathTokens tokens, Func<string, bool> exists)
 {
-    public sealed record Result(DockSettings Settings, List<string> Notes, Dictionary<string, string> IconFilesToCopy);
+    /// <param name="SkinFolder">RocketDock's current skin folder, for the caller to copy in.</param>
+    public sealed record Result(DockSettings Settings, List<string> Notes, Dictionary<string, string> IconFilesToCopy, string? SkinFolder = null);
 
     /// <param name="icons">Values of the Icons key: "0-Title", "0-Command", ..., "count".</param>
     /// <param name="root">Values of the RocketDock key itself (IconMin, Side, ...).</param>
@@ -110,7 +111,15 @@ public sealed class RocketDockImport(PathTokens tokens, Func<string, bool> exist
             dock.Icon = MapIcon(iconFile, dock.Target, rocketDockFolder, copies);
             settings.Items.Add(dock);
         }
-        return new Result(settings.Sanitize(), notes, copies);
+        string? skin = null;
+        if (Get(root, "Theme") is { Length: > 0 } theme)
+        {
+            var dir = Path.Combine(rocketDockFolder, "Skins", theme);
+            if (exists(Path.Combine(dir, "background.ini"))) skin = dir;
+        }
+        settings.Dock.Style = DockStyle.Panel;
+        settings.Dock.Spacing = 2;
+        return new Result(settings.Sanitize(), notes, copies, skin);
     }
 
     /// <summary>Swap Program Files and Program Files (x86) when only the other one exists.</summary>
