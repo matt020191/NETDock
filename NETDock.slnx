@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="NETDock.App/NETDock.App.csproj" />
+  <Project Path="NETDock.Core/NETDock.Core.csproj" />
+  <Project Path="NETDock.Tests/NETDock.Tests.csproj" />
+</Solution>

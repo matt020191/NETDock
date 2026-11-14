@@ -1,0 +1,154 @@
+using System.Text.Json.Serialization;
+
+namespace NETDock.Core;
+
+public enum DockEdge { Bottom, Top, Left, Right }
+
+public enum ItemKind
+{
+    /// <summary>An executable, document or shell parsing name (shell:AppsFolder\AUMID).</summary>
+    App,
+    /// <summary>A .lnk kept as a .lnk, so the shortcut's own Start In and arguments are what launch it.</summary>
+    Shortcut,
+    /// <summary>A file-system folder, shown as a stack (grid flyout) of its contents.</summary>
+    Stack,
+    Separator,
+}
+
+public enum StackView { Grid, List, Open }
+
+public enum StackSort { Name, DateModified, DateCreated, Kind }
+
+/// <summary>
+/// Everything a stack needs to render its flyout. It lives on the item itself, so it is
+/// saved with the dock and survives a restart (RocketDock's Stacks docklet lost this).
+/// </summary>
+public sealed class StackOptions
+{
+    public StackView View { get; set; } = StackView.Grid;
+    public StackSort SortBy { get; set; } = StackSort.Name;
+    public bool SortDescending { get; set; }
+    public bool FoldersFirst { get; set; } = true;
+    /// <summary>0 = pick from the item count.</summary>
+    public int Columns { get; set; }
+    public bool ShowHidden { get; set; }
+    public int MaxItems { get; set; } = 200;
+}
+
+/// <summary>
+/// Launch details captured when a .lnk was added. Only used when the .lnk itself is gone
+/// (for example on another PC); never written back over the item's own fields.
+/// </summary>
+public sealed class ShortcutFallback
+{
+    public string Target { get; set; } = "";
+    public string? Arguments { get; set; }
+    public string? WorkingDirectory { get; set; }
+}
+
+public sealed class DockItem
+{
+    public string Id { get; set; } = Guid.NewGuid().ToString("n");
+    public ItemKind Kind { get; set; }
+    public string Name { get; set; } = "";
+
+    /// <summary>Tokenized path (see <see cref="PathTokens"/>) or a shell parsing name.</summary>
+    public string Target { get; set; } = "";
+    public string? Arguments { get; set; }
+
+    /// <summary>
+    /// Start In, tokenized. Stored exactly as the user set it and never re-derived, so it
+    /// cannot drift (Program Files to Program Files (x86)). Null means "the target's folder",
+    /// decided at launch time rather than baked in.
+    /// </summary>
+    public string? WorkingDirectory { get; set; }
+
+    /// <summary>
+    /// Null = the target's own icon. Otherwise a path relative to the data folder
+    /// ("icons/ab12.png", portable) or a tokenized "file.exe,index" reference.
+    /// </summary>
+    public string? Icon { get; set; }
+
+    public bool RunAsAdmin { get; set; }
+
+    public StackOptions? Stack { get; set; }
+    public ShortcutFallback? Fallback { get; set; }
+}
+
+public sealed class DockOptions
+{
+    public DockEdge Edge { get; set; } = DockEdge.Bottom;
+    /// <summary>0 = primary monitor; otherwise the 1-based index in enumeration order.</summary>
+    public int Monitor { get; set; }
+    public int IconSize { get; set; } = 48;
+    public bool Magnify { get; set; } = true;
+    public int MagnifiedSize { get; set; } = 96;
+    /// <summary>How many icons either side of the cursor grow.</summary>
+    public double MagnifyRange { get; set; } = 2.5;
+    public int Spacing { get; set; } = 8;
+    /// <summary>Gap between the dock and the screen edge, in DIPs.</summary>
+    public int EdgeOffset { get; set; } = 4;
+    /// <summary>0..1 position of the dock's centre along its edge.</summary>
+    public double Centre { get; set; } = 0.5;
+    public bool AutoHide { get; set; }
+    public int AutoHideDelayMs { get; set; } = 600;
+    public bool ShowLabels { get; set; } = true;
+    public bool ShowRunningIndicators { get; set; } = true;
+    public bool Reflections { get; set; } = true;
+    /// <summary>Prevents drag-reordering and drag-off removal.</summary>
+    public bool Locked { get; set; }
+    /// <summary>Clicking a running app brings its window forward instead of starting another copy.</summary>
+    public bool ActivateIfRunning { get; set; } = true;
+    /// <summary>Glass shelf colour, #AARRGGBB.</summary>
+    public string ShelfColor { get; set; } = "#70182030";
+    public string ShelfBorderColor { get; set; } = "#90FFFFFF";
+    public string LabelColor { get; set; } = "#FFFFFFFF";
+    public string IndicatorColor { get; set; } = "#FFBFE4FF";
+}
+
+public sealed class DockSettings
+{
+    public const int CurrentSchema = 1;
+
+    public int SchemaVersion { get; set; } = CurrentSchema;
+    public DockOptions Dock { get; set; } = new();
+    public List<DockItem> Items { get; set; } = [];
+    public bool LaunchAtStartup { get; set; }
+
+    /// <summary>Clamp every number into a range the renderer can draw, so a hand-edited file can't break it.</summary>
+    public DockSettings Sanitize()
+    {
+        var d = Dock ??= new DockOptions();
+        d.IconSize = Math.Clamp(d.IconSize, 16, 256);
+        d.MagnifiedSize = Math.Clamp(d.MagnifiedSize, d.IconSize, 256);
+        d.MagnifyRange = Math.Clamp(double.IsFinite(d.MagnifyRange) ? d.MagnifyRange : 2.5, 1, 8);
+        d.Spacing = Math.Clamp(d.Spacing, 0, 64);
+        d.EdgeOffset = Math.Clamp(d.EdgeOffset, 0, 200);
+        d.Centre = Math.Clamp(double.IsFinite(d.Centre) ? d.Centre : 0.5, 0, 1);
+        d.AutoHideDelayMs = Math.Clamp(d.AutoHideDelayMs, 0, 10_000);
+        d.Monitor = Math.Max(0, d.Monitor);
+        Items ??= [];
+        Items.RemoveAll(i => i is null);
+        foreach (var i in Items)
+        {
+            if (string.IsNullOrEmpty(i.Id)) i.Id = Guid.NewGuid().ToString("n");
+            if (i.Kind == ItemKind.Stack) i.Stack ??= new StackOptions();
+            if (i.Stack is { } s)
+            {
+                s.Columns = Math.Clamp(s.Columns, 0, 20);
+                s.MaxItems = Math.Clamp(s.MaxItems, 1, 2000);
+            }
+        }
+        return this;
+    }
+}
+
+[JsonSourceGenerationOptions(
+    WriteIndented = true,
+    UseStringEnumConverter = true,
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    ReadCommentHandling = System.Text.Json.JsonCommentHandling.Skip,
+    AllowTrailingCommas = true)]
+[JsonSerializable(typeof(DockSettings))]
+public sealed partial class SettingsJson : JsonSerializerContext;
