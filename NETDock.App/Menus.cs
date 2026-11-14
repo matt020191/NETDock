@@ -8,6 +8,7 @@ public static unsafe class Menus
 {
     private static readonly int[] IconSizes = [32, 40, 44, 48, 56, 64, 72, 80, 96, 128];
     private static readonly int[] Spacings = [0, 2, 4, 6, 8, 12];
+    private static readonly int[] SepSpacings = [0, 2, 4, 6, 8, 12, 16, 24];
     private static List<(string Name, string Reference, string? Source)> _skinChoices = [];
 
     /// <summary>Skins already in the data folder, then the installed RocketDock ones (copied in when picked).</summary>
@@ -110,6 +111,8 @@ public static unsafe class Menus
         for (var i = 0; i < IconSizes.Length; i++) Add(size, (uint)(100 + i), $"{IconSizes[i]} px", o.IconSize == IconSizes[i]);
         var gap = Sub("Icon spacing");
         for (var i = 0; i < Spacings.Length; i++) Add(gap, (uint)(160 + i), Spacings[i] == 0 ? "None" : $"{Spacings[i]} px", o.Spacing == Spacings[i]);
+        var sepGap = Sub("Separator spacing");
+        for (var i = 0; i < SepSpacings.Length; i++) Add(sepGap, (uint)(170 + i), SepSpacings[i] == 0 ? "None" : $"{SepSpacings[i]} px", o.SeparatorSpacing == SepSpacings[i]);
         var zoom = Sub("Zoom size");
         Add(zoom, 70, "Magnify on hover", o.Magnify);
         Sep(zoom);
@@ -239,6 +242,7 @@ public static unsafe class Menus
                 break;
             }
             case >= 160 and < 170 when cmd - 160 < Spacings.Length: o.Spacing = Spacings[cmd - 160]; break;
+            case >= 170 and < 180 when cmd - 170 < SepSpacings.Length: o.SeparatorSpacing = SepSpacings[cmd - 170]; break;
             case 80: o.ShowLabels = !o.ShowLabels; break;
             case 81: o.Reflections = !o.Reflections; break;
             case 82: o.ShowRunningIndicators = !o.ShowRunningIndicators; break;

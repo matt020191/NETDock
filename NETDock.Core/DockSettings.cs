@@ -90,6 +90,8 @@ public sealed class DockOptions
     public double MagnifyRange { get; set; } = 2.5;
     /// <summary>Gap between icons at rest, in DIPs. RocketDock packs icons almost edge to edge.</summary>
     public int Spacing { get; set; } = 2;
+    /// <summary>Gap either side of a separator, in DIPs (RocketDock sets this apart from icon spacing).</summary>
+    public int SeparatorSpacing { get; set; } = 8;
     public DockStyle Style { get; set; } = DockStyle.Panel;
     /// <summary>
     /// A RocketDock-format skin folder (background.ini + bg.png, separator.ini + sep.png).
@@ -133,6 +135,7 @@ public sealed class DockSettings
         d.MagnifiedSize = Math.Clamp(d.MagnifiedSize, d.IconSize, 256);
         d.MagnifyRange = Math.Clamp(double.IsFinite(d.MagnifyRange) ? d.MagnifyRange : 2.5, 1, 8);
         d.Spacing = Math.Clamp(d.Spacing, 0, 64);
+        d.SeparatorSpacing = Math.Clamp(d.SeparatorSpacing, 0, 64);
         d.EdgeOffset = Math.Clamp(d.EdgeOffset, 0, 200);
         d.Centre = Math.Clamp(double.IsFinite(d.Centre) ? d.Centre : 0.5, 0, 1);
         d.AutoHideDelayMs = Math.Clamp(d.AutoHideDelayMs, 0, 10_000);

@@ -16,7 +16,9 @@ public sealed record Skin(
         if (bgIni is null) return null;
         var bg = RocketDockImport.ParseIni(bgIni).GetValueOrDefault("Background");
         if (bg is null || !bg.TryGetValue("Image", out var image) || !IsBareName(image)) return null;
-        int I(Dictionary<string, string>? d, string k) => d is not null && d.TryGetValue(k, out var v) && int.TryParse(v, out var n) ? n : 0;
+        // Untrusted numbers: clamp so a bad skin can't index outside the image or blow up the layout.
+        int I(Dictionary<string, string>? d, string k) =>
+            d is not null && d.TryGetValue(k, out var v) && int.TryParse(v, out var n) ? Math.Clamp(n, 0, 256) : 0;
 
         var sepIni = readText(Path.Combine(folder, "separator.ini"));
         var sep = sepIni is null ? null : RocketDockImport.ParseIni(sepIni).GetValueOrDefault("Separator");
@@ -36,7 +38,12 @@ public sealed record Skin(
     /// </summary>
     public static (int L, int T, int R, int B) StretchMargins(ReadOnlySpan<byte> bgra, int w, int h, int l, int t, int r, int b, int tolerance = 6)
     {
+        if (w <= 0 || h <= 0 || bgra.Length < w * h * 4) return (0, 0, 0, 0);
         var cx = w / 2;
+        l = Math.Clamp(l, 0, cx);
+        r = Math.Clamp(r, 0, w - cx - 1);
+        t = Math.Clamp(t, 0, h / 2);
+        b = Math.Clamp(b, 0, h - h / 2 - 1);
         bool ColumnLikeCentre(ReadOnlySpan<byte> px, int x)
         {
             for (var y = 0; y < h; y++)

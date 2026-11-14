@@ -102,3 +102,30 @@ public class StretchMarginTests
         Assert.Equal((12, 2, 12, 1), (l, t, r, b));
     }
 }
+
+public class HostileSkinTests
+{
+    [Fact]
+    public void Negative_and_huge_margins_are_clamped()
+    {
+        var s = Skin.Load("S", p => p.EndsWith("background.ini")
+            ? "[Background]\nImage=bg.png\nLeftMargin=-50\nRightMargin=99999\nOutside-TopMargin=-3\n" : null)!;
+        Assert.Equal(0, s.Left);
+        Assert.Equal(256, s.Right);
+        Assert.Equal(0, s.OutTop);
+
+        var px = new byte[10 * 4 * 4];
+        var (l, t, r, b) = Skin.StretchMargins(px, 10, 4, s.Left, -5, s.Right, 999);
+        Assert.InRange(l, 0, 5);
+        Assert.InRange(r, 0, 5);
+        Assert.InRange(t, 0, 2);
+        Assert.InRange(b, 0, 2);
+    }
+
+    [Fact]
+    public void Short_or_mismatched_pixel_buffers_do_not_throw() =>
+        Assert.Equal((0, 0, 0, 0), Skin.StretchMargins(new byte[8], 10, 10, 2, 2, 2, 2));
+
+    [Fact]
+    public void Truncated_png_header_is_not_a_png() => Assert.Null(Skin.PngSize(new byte[10]));
+}

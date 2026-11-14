@@ -24,7 +24,7 @@ public sealed unsafe partial class DockWindow : WindowBase
     private float _scale = 1;
     private RECT _work;
     private int _thickness, _length;
-    private float _base, _max, _pad, _spacing, _shelfV0, _shelfThick, _iconV0, _labelH;
+    private float _base, _max, _pad, _spacing, _sepSpacing, _shelfV0, _shelfThick, _iconV0, _labelH;
 
     // Panel style: how far the background reaches past the icons (along the row, at the
     // screen-edge side, and on the side away from the edge), in pixels.
@@ -80,6 +80,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         _max = (Opt.Magnify ? Opt.MagnifiedSize : Opt.IconSize) * _scale;
         _pad = 6 * _scale;
         _spacing = Opt.Spacing * _scale;
+        _sepSpacing = Opt.SeparatorSpacing * _scale;
         _shelfV0 = Opt.EdgeOffset * _scale;
         _shelfThick = _base * 0.45f + _pad;
         _iconV0 = _shelfV0 + _pad * 1.4f;
@@ -142,8 +143,14 @@ public sealed unsafe partial class DockWindow : WindowBase
         _ => (x, _thickness - y),
     };
 
+    /// <summary>A separator's own width is just its line (or skin image); the room around it is <see cref="Gap"/>.</summary>
     private float RestLength(DockItem i) => i.Kind != ItemKind.Separator ? _base
-        : Panel && _skinSep != 0 ? Math.Max(4 * _scale, _skinSepW * _scale) : _base * 0.3f;
+        : Panel && _skinSep != 0 ? Math.Max(1, _skinSepW * _scale) : 2 * _scale;
+
+    /// <summary>The gap before item <paramref name="i"/>: separator spacing next to a separator, icon spacing otherwise.</summary>
+    private float Gap(int i) =>
+        i <= 0 || i >= Items.Count ? 0
+        : Items[i].Kind == ItemKind.Separator || Items[i - 1].Kind == ItemKind.Separator ? _sepSpacing : _spacing;
 
     private void LoadSkin()
     {
@@ -151,12 +158,23 @@ public sealed unsafe partial class DockWindow : WindowBase
         Com.Release(ref _skinSep);
         _skin = null;
         if (!Panel || _app.Store.ResolveSkin(_app.Tokens.Expand(Opt.Skin)) is not { } folder) return;
-        _skin = Skin.Load(folder, f => File.Exists(f) ? File.ReadAllText(f) : null);
-        if (_skin is null) return;
-        (_skinBg, _skinBgW, _skinBgH) = LoadImage(_skin.Background, out var bgPixels);
-        if (bgPixels is not null) (_skinL, _, _skinR, _) = Skin.StretchMargins(bgPixels, _skinBgW, _skinBgH, _skin.Left, _skin.Top, _skin.Right, _skin.Bottom);
-        if (_skin.Separator is { } sep) (_skinSep, _skinSepW, _skinSepH) = LoadImage(sep);
-        if (_skinBg == 0) _skin = null;
+        try
+        {
+            _skin = Skin.Load(folder, f => File.Exists(f) ? File.ReadAllText(f) : null);
+            if (_skin is null) return;
+            (_skinBg, _skinBgW, _skinBgH) = LoadImage(_skin.Background, out var bgPixels);
+            if (bgPixels is not null) (_skinL, _, _skinR, _) = Skin.StretchMargins(bgPixels, _skinBgW, _skinBgH, _skin.Left, _skin.Top, _skin.Right, _skin.Bottom);
+            if (_skin.Separator is { } sep) (_skinSep, _skinSepW, _skinSepH) = LoadImage(sep);
+            if (_skinBg == 0) _skin = null;
+        }
+        catch (Exception ex)
+        {
+            // A broken skin must never stop the dock starting: fall back to the built-in panel.
+            App.Log(ex);
+            Com.Release(ref _skinBg);
+            Com.Release(ref _skinSep);
+            _skin = null;
+        }
     }
 
     /// <summary>A skin image at its native size (the Shell thumbnailer decodes the PNG).</summary>
@@ -167,7 +185,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         pixels = null;
         if (!File.Exists(file)) return (0, 0, 0);
         var head = new byte[24];
-        using (var fs = File.OpenRead(file)) fs.ReadExactly(head);
+        using (var fs = File.OpenRead(file)) fs.ReadAtLeast(head, head.Length, throwOnEndOfStream: false); // short file: PngSize returns null
         var native = Skin.PngSize(head);
         var img = Shell.ShellImage(file, native is { } n ? Math.Max(n.W, n.H) : 256, preferThumbnail: true);
         if (img is null) return (0, 0, 0);
@@ -229,20 +247,21 @@ public sealed unsafe partial class DockWindow : WindowBase
         Array.Fill(t, 1.0);
         if (_cursorU is not { } cu || !Opt.Magnify || _max <= _base || _dragging >= 0) return t;
         float total = 0;
-        for (var i = 0; i < n; i++) total += RestLength(Items[i]) + (i > 0 ? _spacing : 0);
+        for (var i = 0; i < n; i++) total += RestLength(Items[i]) + Gap(i);
         var start = RowCentre() - total / 2;
         var pitch = _base + _spacing;
         var gain = _max / _base - 1;
         var u = start;
         for (var i = 0; i < n; i++)
         {
+            u += Gap(i);
             var len = RestLength(Items[i]);
             if (Items[i].Kind != ItemKind.Separator)
             {
                 var d = Math.Abs(cu - (u + len / 2)) / (pitch * Opt.MagnifyRange);
                 if (d < 1) t[i] = 1 + gain * (Math.Cos(d * Math.PI) + 1) / 2;
             }
-            u += len + _spacing;
+            u += len;
         }
         return t;
     }
@@ -258,17 +277,17 @@ public sealed unsafe partial class DockWindow : WindowBase
         for (var i = 0; i < n; i++)
         {
             _len[i] = RestLength(Items[i]) * (float)_scales[i];
-            total += _len[i] + (i > 0 ? _spacing : 0);
+            total += _len[i] + Gap(i);
         }
         var start = Math.Clamp(RowCentre() - total / 2, _pad * 2, Math.Max(_pad * 2, _length - total - _pad * 2));
-        for (var i = 0; i < n; i++) { _u0[i] = start; start += _len[i] + _spacing; }
+        for (var i = 0; i < n; i++) { start += Gap(i); _u0[i] = start; start += _len[i]; }
     }
 
     private int HitTest(float u, float v)
     {
         for (var i = 0; i < Items.Count; i++)
         {
-            if (u < _u0[i] - _spacing / 2 || u >= _u0[i] + _len[i] + _spacing / 2) continue;
+            if (u < _u0[i] - Gap(i) / 2 || u >= _u0[i] + _len[i] + Gap(i + 1) / 2) continue;
             if (v >= _shelfV0 - 1 && v <= _iconV0 + _len[i] + _pad) return i;
         }
         return -1;
@@ -568,7 +587,7 @@ public sealed unsafe partial class DockWindow : WindowBase
     private int InsertIndex(float u)
     {
         for (var i = 0; i < Items.Count; i++)
-            if (u < _u0[i] + _len[i] / 2 + _spacing / 2) return i;
+            if (u < _u0[i] + _len[i] / 2 + Gap(i + 1) / 2) return i;
         return Items.Count - 1;
     }
 
