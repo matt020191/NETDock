@@ -231,6 +231,7 @@ public sealed unsafe class SettingsWindow : WindowBase
         float y = 60;
         Check(ref y, "Auto-hide", () => Opt.AutoHide, v => Opt.AutoHide = v);
         Slider(ref y, "Auto-hide delay", 0, 3000, () => Opt.AutoHideDelayMs, v => Opt.AutoHideDelayMs = v, v => $"{v}ms");
+        Slider(ref y, "Auto-hide duration", 0, 1500, () => Opt.AutoHideDurationMs, v => Opt.AutoHideDurationMs = v, v => v == 0 ? "Instant" : $"{v}ms");
         Combo(ref y, "Clicking a program that is already running", ["Switches to it (click again to minimise)", "Starts another copy"],
             () => Opt.ActivateIfRunning ? 0 : 1, v => Opt.ActivateIfRunning = v == 0);
         _ui.Label("Shift+click or middle-click always starts another copy; Ctrl+Shift+click runs as administrator.", X, y, Wide, 40);

@@ -132,6 +132,8 @@ public sealed class DockOptions
     public int PopUpDelayMs { get; set; } = 250;
     public bool AutoHide { get; set; }
     public int AutoHideDelayMs { get; set; } = 600;
+    /// <summary>How long the auto-hide slide takes, in ms (0 = instant).</summary>
+    public int AutoHideDurationMs { get; set; } = 200;
     public bool ShowLabels { get; set; } = true;
     public bool ShowRunningIndicators { get; set; } = true;
     public bool Reflections { get; set; } = true;
@@ -175,6 +177,7 @@ public sealed class DockSettings
         d.Centre = Math.Clamp(double.IsFinite(d.Centre) ? d.Centre : 0.5, 0, 1);
         d.AutoHideDelayMs = Math.Clamp(d.AutoHideDelayMs, 0, 10_000);
         d.PopUpDelayMs = Math.Clamp(d.PopUpDelayMs, 0, 5_000);
+        d.AutoHideDurationMs = Math.Clamp(d.AutoHideDurationMs, 0, 3_000);
         d.Monitor = Math.Max(0, d.Monitor);
         // A skin is only ever a copy inside the data folder; anything else (absolute, UNC,
         // "..") from a hand-edited or imported file falls back to the built-in panel.

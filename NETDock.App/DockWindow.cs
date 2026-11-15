@@ -49,6 +49,9 @@ public sealed unsafe partial class DockWindow : WindowBase
     private readonly Dictionary<string, long> _bounces = [];
     private double _hide; // 0 shown, 1 hidden
     private bool _hideWanted;
+    /// <summary>Linear slide progress (0 shown, 1 hidden); <c>_hide</c> is its eased value.</summary>
+    private double _hideP;
+    private long _lastTick;
     private Dictionary<string, List<nint>> _running = new(StringComparer.OrdinalIgnoreCase);
 
     public DockWindow(App app) => _app = app;
@@ -505,9 +508,18 @@ public sealed unsafe partial class DockWindow : WindowBase
             if (Math.Abs(d) > 0.002) { _scales[i] += d * ZoomStep; moving = true; }
             else _scales[i] = target[i];
         }
+        // Time-based so AutoHideDurationMs holds whatever the timer resolution is.
+        var now = Environment.TickCount64;
+        var dt = _lastTick == 0 ? 10 : Math.Clamp(now - _lastTick, 1, 100);
+        _lastTick = now;
         var hideTarget = _hideWanted ? 1.0 : 0.0;
-        if (Math.Abs(_hide - hideTarget) > 0.01) { _hide += (hideTarget - _hide) * 0.25; moving = true; }
-        else _hide = hideTarget;
+        if (_hideP != hideTarget)
+        {
+            var step = Opt.AutoHideDurationMs <= 0 ? 1.0 : dt / (double)Opt.AutoHideDurationMs;
+            _hideP = hideTarget > _hideP ? Math.Min(hideTarget, _hideP + step) : Math.Max(hideTarget, _hideP - step);
+            moving = _hideP != hideTarget || moving;
+        }
+        _hide = _hideP * _hideP * (3 - 2 * _hideP); // smoothstep
         if (_bounces.Count > 0 || _dragging >= 0) moving = true;
 
         if (_cursorU is { } cu) _hover = HitTest(cu, _cursorV);
@@ -515,6 +527,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         if (!moving)
         {
             _animating = false;
+            _lastTick = 0;
             Win32.KillTimer(Hwnd, AnimTimer);
         }
     }
