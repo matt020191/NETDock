@@ -145,6 +145,15 @@ public sealed class DockOptions
     public string ShelfColor { get; set; } = "#70182030";
     public string ShelfBorderColor { get; set; } = "#90FFFFFF";
     public string LabelColor { get; set; } = "#FFFFFFFF";
+    public string LabelFont { get; set; } = "Segoe UI";
+    /// <summary>Label text size in px at 100 % scaling.</summary>
+    public int LabelSize { get; set; } = 13;
+    public bool LabelBold { get; set; } = true;
+    /// <summary>Outline around the letters; alpha 0 = none (RocketDock: outline colour + opacity).</summary>
+    public string LabelOutlineColor { get; set; } = "#00000000";
+    public string LabelShadowColor { get; set; } = "#99000000";
+    /// <summary>Rounded pill behind the label; alpha 0 = none.</summary>
+    public string LabelBackgroundColor { get; set; } = "#C70D1219";
     public string IndicatorColor { get; set; } = "#FFBFE4FF";
 }
 
@@ -178,6 +187,8 @@ public sealed class DockSettings
         d.AutoHideDelayMs = Math.Clamp(d.AutoHideDelayMs, 0, 10_000);
         d.PopUpDelayMs = Math.Clamp(d.PopUpDelayMs, 0, 5_000);
         d.AutoHideDurationMs = Math.Clamp(d.AutoHideDurationMs, 0, 3_000);
+        d.LabelSize = Math.Clamp(d.LabelSize, 8, 32);
+        if (string.IsNullOrWhiteSpace(d.LabelFont) || d.LabelFont.Length > 64) d.LabelFont = "Segoe UI";
         d.Monitor = Math.Max(0, d.Monitor);
         // A skin is only ever a copy inside the data folder; anything else (absolute, UNC,
         // "..") from a hand-edited or imported file falls back to the built-in panel.

@@ -243,3 +243,23 @@ public class HotkeyTests
     [InlineData("Ctrl+Banana")]
     public void Rejects(string text) => Assert.Null(Hotkey.Parse(text));
 }
+
+public class ArgbColorTests
+{
+    [Fact]
+    public void Parses_both_forms_and_falls_back()
+    {
+        Assert.Equal(0xFF102030u, ArgbColor.Parse("#102030", 0));
+        Assert.Equal(0x80102030u, ArgbColor.Parse("#80102030", 0));
+        Assert.Equal(0x12345678u, ArgbColor.Parse("red", 0x12345678));
+    }
+
+    [Fact]
+    public void Opacity_and_rgb_edit_independently()
+    {
+        var c = ArgbColor.WithOpacity("#FF102030", 0, 50);
+        Assert.Equal("#80102030", c);
+        Assert.Equal(50, ArgbColor.Opacity(c, 0));
+        Assert.Equal("#80AABBCC", ArgbColor.WithRgb(c, 0, 0xAABBCC));
+    }
+}

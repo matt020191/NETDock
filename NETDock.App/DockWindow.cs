@@ -104,10 +104,11 @@ public sealed unsafe partial class DockWindow : WindowBase
             _outAway += Opt.PanelPadding * _scale;
             _iconV0 = _shelfV0 + _outEdge;
         }
-        _labelH = 24 * _scale;
+        _labelH = MathF.Round(Opt.LabelSize * 1.85f) * _scale;
 
         if (_labelFormat != 0) Com.Release(ref _labelFormat);
-        _labelFormat = D2D.CreateTextFormat("Segoe UI", 12.5f * _scale, bold: true, centre: true, ellipsis: false);
+        try { _labelFormat = D2D.CreateTextFormat(Opt.LabelFont, Opt.LabelSize * _scale, bold: Opt.LabelBold, centre: true, ellipsis: false); }
+        catch { _labelFormat = D2D.CreateTextFormat("Segoe UI", Opt.LabelSize * _scale, bold: Opt.LabelBold, centre: true, ellipsis: false); }
         if (_shelfBrush == 0)
             _shelfBrush = _surface.CreateVerticalGradient([
                 new D2DGradientStop { Position = 0, Color = new D2DColor(1, 1, 1, 0.28f) },
@@ -438,10 +439,27 @@ public sealed unsafe partial class DockWindow : WindowBase
             var u0 = Math.Clamp(c - w / 2, 2, _length - w - 2);
             r = ToWindow(u0, u0 + w, top, top + _labelH);
         }
-        _surface.FillRoundRect(r, _labelH / 2, new D2DColor(0.05f, 0.07f, 0.1f, 0.78f));
-        _surface.DrawRoundRect(r, _labelH / 2, new D2DColor(1, 1, 1, 0.18f), 1);
-        var shadow = new D2DRect(r.L + 1, r.T + 1, r.R + 1, r.B + 1);
-        _surface.DrawText(text, _labelFormat, shadow, new D2DColor(0, 0, 0, 0.6f));
+        var bg = D2DColor.Parse(Opt.LabelBackgroundColor, 0xC70D1219);
+        if (bg.A > 0)
+        {
+            _surface.FillRoundRect(r, _labelH / 2, bg);
+            _surface.DrawRoundRect(r, _labelH / 2, new D2DColor(1, 1, 1, 0.18f * bg.A), 1);
+        }
+        var shadowC = D2DColor.Parse(Opt.LabelShadowColor, 0x99000000);
+        if (shadowC.A > 0)
+        {
+            var d = MathF.Max(1, 1.5f * _scale);
+            _surface.DrawText(text, _labelFormat, new D2DRect(r.L + d, r.T + d, r.R + d, r.B + d), shadowC);
+        }
+        var outline = D2DColor.Parse(Opt.LabelOutlineColor, 0);
+        if (outline.A > 0)
+        {
+            var o = MathF.Max(1, _scale);
+            for (var dx = -1; dx <= 1; dx++)
+                for (var dy = -1; dy <= 1; dy++)
+                    if (dx != 0 || dy != 0)
+                        _surface.DrawText(text, _labelFormat, new D2DRect(r.L + dx * o, r.T + dy * o, r.R + dx * o, r.B + dy * o), outline);
+        }
         _surface.DrawText(text, _labelFormat, r, D2DColor.Parse(Opt.LabelColor, 0xFFFFFFFF));
     }
 

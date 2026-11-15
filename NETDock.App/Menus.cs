@@ -326,8 +326,30 @@ public static unsafe class Menus
     }
 }
 
-public static unsafe class Dialogs
+public static unsafe partial class Dialogs
 {
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct CHOOSECOLORW
+    {
+        public uint lStructSize; public nint hwndOwner, hInstance; public uint rgbResult; public uint* lpCustColors;
+        public uint Flags; public nint lCustData, lpfnHook, lpTemplateName;
+    }
+    [System.Runtime.InteropServices.LibraryImport("comdlg32.dll", EntryPoint = "ChooseColorW")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static partial bool ChooseColor(CHOOSECOLORW* c);
+    private static readonly uint[] CustomColors = new uint[16];
+
+    /// <summary>Windows colour picker. Takes and returns 0xRRGGBB; null if cancelled.</summary>
+    public static uint? PickColor(nint owner, uint rgb)
+    {
+        static uint Swap(uint v) => ((v & 0xFF) << 16) | (v & 0xFF00) | ((v >> 16) & 0xFF); // RRGGBB <-> COLORREF
+        fixed (uint* cust = CustomColors)
+        {
+            var c = new CHOOSECOLORW { lStructSize = (uint)sizeof(CHOOSECOLORW), hwndOwner = owner, rgbResult = Swap(rgb), lpCustColors = cust, Flags = 0x1 | 0x2 /* RGBINIT | FULLOPEN */ };
+            return ChooseColor(&c) ? Swap(c.rgbResult) : null;
+        }
+    }
+
     /// <param name="initial">A file or folder to open the dialog at (typically the field's current value).</param>
     public static string? PickFile(nint owner, string title, string filter, bool dereferenceLinks = true, string? initial = null)
     {

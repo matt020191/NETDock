@@ -17,7 +17,7 @@ public sealed unsafe class SettingsWindow : WindowBase
     private static readonly (string Glyph, string Name)[] Pages =
     [
         ("", "General"), ("", "Icons"), ("", "Position"),
-        ("", "Style"), ("", "Behavior"), ("", "About"),
+        ("", "Style"), ("", "Labels"), ("", "Behavior"), ("", "About"),
     ];
 
     private readonly App _app;
@@ -31,7 +31,9 @@ public sealed unsafe class SettingsWindow : WindowBase
 
     private readonly Dictionary<int, Action<int>> _onCommand = [];   // id → handler(notification code)
     private readonly Dictionary<nint, Action<int>> _onSlide = [];    // trackbar → handler(pos)
-    private readonly List<Action> _refresh = [];                    // re-read controls after Defaults
+    private readonly List<Action> _refresh = [];
+    private readonly Dictionary<nint, Func<uint>> _swatches = [];  // colour swatch statics -> ARGB
+    private readonly Dictionary<nint, nint> _swatchBrushes = [];                    // re-read controls after Defaults
 
     private SettingsWindow(App app) => _app = app;
     private DockOptions Opt => _app.Settings.Dock;
@@ -69,7 +71,7 @@ public sealed unsafe class SettingsWindow : WindowBase
         _title = _ui.Label("", 168, 12, 480, 34);
         Win32.SendMessage(_title, Win32.WM_SETFONT, _titleFont, 1);
 
-        BuildGeneral(); BuildIcons(); BuildPosition(); BuildStyle(); BuildBehavior(); BuildAbout();
+        BuildGeneral(); BuildIcons(); BuildPosition(); BuildStyle(); BuildLabels(); BuildBehavior(); BuildAbout();
         _ui.Page = -1;
         _ui.Button("Defaults", 12, 552, 110, 30, IdDefaults);
         _ui.Button("OK", 448, 552, 100, 30, IdOk, isDefault: true);
@@ -220,14 +222,58 @@ public sealed unsafe class SettingsWindow : WindowBase
                 Opt.Skin = choice.Source is { } src ? _app.Store.ImportSkin(src) : choice.Reference;
             });
         Slider(ref y, "Panel padding (above and below icons)", 0, 16, () => Opt.PanelPadding, v => Opt.PanelPadding = v, v => $"{v}px");
-        Check(ref y, "Show labels on hover", () => Opt.ShowLabels, v => Opt.ShowLabels = v);
         Check(ref y, "Show running indicators", () => Opt.ShowRunningIndicators, v => Opt.ShowRunningIndicators = v);
         Check(ref y, "Reflections (platform shelf)", () => Opt.Reflections, v => Opt.Reflections = v);
     }
 
-    private void BuildBehavior()
+    private void BuildLabels()
     {
         _ui.Page = 4;
+        float y = 60;
+        Check(ref y, "Show labels on hover", () => Opt.ShowLabels, v => Opt.ShowLabels = v);
+        var fonts = Fonts.Installed();
+        if (!fonts.Contains(Opt.LabelFont)) { fonts.Add(Opt.LabelFont); fonts.Sort(StringComparer.OrdinalIgnoreCase); }
+        Combo(ref y, "Font", [.. fonts], () => Math.Max(0, fonts.IndexOf(Opt.LabelFont)), v => Opt.LabelFont = fonts[v]);
+        Slider(ref y, "Size", 8, 32, () => Opt.LabelSize, v => Opt.LabelSize = v, v => $"{v}px");
+        Check(ref y, "Bold", () => Opt.LabelBold, v => Opt.LabelBold = v);
+        ColorRow(ref y, "Text", () => Opt.LabelColor, v => Opt.LabelColor = v, 0xFFFFFFFF);
+        ColorRow(ref y, "Outline", () => Opt.LabelOutlineColor, v => Opt.LabelOutlineColor = v, 0);
+        ColorRow(ref y, "Shadow", () => Opt.LabelShadowColor, v => Opt.LabelShadowColor = v, 0x99000000);
+        ColorRow(ref y, "Background", () => Opt.LabelBackgroundColor, v => Opt.LabelBackgroundColor = v, 0xC70D1219);
+    }
+
+    /// <summary>"Title  [Colour...]  opacity ──●──  (n %)": RocketDock's colour + opacity pairs.</summary>
+    private void ColorRow(ref float y, string title, Func<string> get, Action<string> set, uint fallback)
+    {
+        _ui.Label(title, X, y + 6, 80);
+        var swatch = _ui.Label("", X + 82, y + 4, 26, 24, 0x1000 /* SS_SUNKEN */);
+        _swatches[swatch] = () => ArgbColor.Parse(get(), fallback);
+        Btn(X + 116, y, 90, "Colour...", () =>
+        {
+            var argb = ArgbColor.Parse(get(), fallback);
+            if (Dialogs.PickColor(Hwnd, argb & 0xFFFFFF) is { } rgb)
+            {
+                Apply(() => set(ArgbColor.WithRgb(get(), fallback, rgb)));
+                Ui.InvalidateRect(swatch, null, true);
+            }
+        });
+        var id = Id();
+        var bar = _ui.Slider(X + 214, y + 2, 200, id, 0, 100, ArgbColor.Opacity(get(), fallback));
+        var value = _ui.Label($"{ArgbColor.Opacity(get(), fallback)} %", X + 420, y + 6, 60);
+        _onSlide[bar] = pos => { Apply(() => set(ArgbColor.WithOpacity(get(), fallback, pos))); Ui.SetWindowText(value, $"{pos} %"); };
+        _refresh.Add(() =>
+        {
+            var o = ArgbColor.Opacity(get(), fallback);
+            Win32.SendMessage(bar, Ui.TBM_SETPOS, 1, o);
+            Ui.SetWindowText(value, $"{o} %");
+            Ui.InvalidateRect(swatch, null, true);
+        });
+        y += 40;
+    }
+
+    private void BuildBehavior()
+    {
+        _ui.Page = 5;
         float y = 60;
         Check(ref y, "Auto-hide", () => Opt.AutoHide, v => Opt.AutoHide = v);
         Slider(ref y, "Auto-hide delay", 0, 3000, () => Opt.AutoHideDelayMs, v => Opt.AutoHideDelayMs = v, v => $"{v}ms");
@@ -256,7 +302,7 @@ public sealed unsafe class SettingsWindow : WindowBase
 
     private void BuildAbout()
     {
-        _ui.Page = 5;
+        _ui.Page = 6;
         var version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "";
         float y = 60;
         _ui.Label($"NETDock {version}", X, y, Wide, 24); y += 28;
@@ -285,6 +331,8 @@ public sealed unsafe class SettingsWindow : WindowBase
             _app.Dock.RegisterToggleHotkey();
         }
         Win32.DestroyWindow(Hwnd);
+        foreach (var b in _swatchBrushes.Values) Win32.DeleteObject(b);
+        _swatchBrushes.Clear();
     }
 
     protected override nint WndProc(uint msg, nint w, nint l)
@@ -317,6 +365,17 @@ public sealed unsafe class SettingsWindow : WindowBase
             case Ui.WM_HSCROLL:
                 if (_onSlide.TryGetValue(l, out var slide)) slide(Layout.Get(l, Ui.TBM_GETPOS));
                 return 0;
+            case Ui.WM_CTLCOLORSTATIC when _swatches.TryGetValue(l, out var swatchColor):
+            {
+                // Show the colour blended over white by its opacity, like the dock would over a light desktop.
+                var c = swatchColor();
+                var a = (c >> 24) / 255.0;
+                byte Mix(uint ch) => (byte)Math.Round(255 + (ch - 255.0) * a);
+                if (_swatchBrushes.Remove(l, out var old)) Win32.DeleteObject(old);
+                var brush = Ui.CreateSolidBrush(Ui.Rgb(Mix((c >> 16) & 0xFF), Mix((c >> 8) & 0xFF), Mix(c & 0xFF)));
+                _swatchBrushes[l] = brush;
+                return brush;
+            }
             case Ui.WM_CTLCOLORSTATIC:
             case Ui.WM_CTLCOLORBTN:
                 Ui.SetBkColor(w, Ui.GetSysColor(5));
