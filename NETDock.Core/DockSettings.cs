@@ -127,6 +127,9 @@ public sealed class DockOptions
     /// <summary>Global hotkey that hides or shows the whole dock (RocketDock: Ctrl+Alt+R). Blank = none.</summary>
     public string? ToggleHotkey { get; set; } = "Ctrl+Alt+R";
     public DockLayer Layer { get; set; } = DockLayer.AlwaysOnTop;
+    /// <summary>When not always on top: resting the mouse on the screen edge brings the dock over other windows.</summary>
+    public bool PopUp { get; set; } = true;
+    public int PopUpDelayMs { get; set; } = 250;
     public bool AutoHide { get; set; }
     public int AutoHideDelayMs { get; set; } = 600;
     public bool ShowLabels { get; set; } = true;
@@ -171,6 +174,7 @@ public sealed class DockSettings
         d.EdgeOffset = Math.Clamp(d.EdgeOffset, 0, 200);
         d.Centre = Math.Clamp(double.IsFinite(d.Centre) ? d.Centre : 0.5, 0, 1);
         d.AutoHideDelayMs = Math.Clamp(d.AutoHideDelayMs, 0, 10_000);
+        d.PopUpDelayMs = Math.Clamp(d.PopUpDelayMs, 0, 5_000);
         d.Monitor = Math.Max(0, d.Monitor);
         // A skin is only ever a copy inside the data folder; anything else (absolute, UNC,
         // "..") from a hand-edited or imported file falls back to the built-in panel.

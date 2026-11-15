@@ -13,7 +13,7 @@ namespace NETDock.App;
 /// </summary>
 public sealed unsafe partial class DockWindow : WindowBase
 {
-    private const nuint AnimTimer = 1, RunningTimer = 2, RunningDebounce = 3, HideTimer = 4;
+    private const nuint AnimTimer = 1, RunningTimer = 2, RunningDebounce = 3, HideTimer = 4, PopTimer = 5;
     private readonly App _app;
     private LayeredSurface _surface = null!;
     private nint _labelFormat, _shelfBrush;
@@ -66,6 +66,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         _shellHookMsg = Win32.RegisterWindowMessage("SHELLHOOK");
         Win32.RegisterShellHookWindow(Hwnd);
         Win32.SetTimer(Hwnd, RunningTimer, 3000, 0); // backstop for windows the hook misses
+        Win32.SetTimer(Hwnd, PopTimer, 80, 0);
         RecycleBinService.Start(Hwnd);
         RegisterToggleHotkey();
         Relayout();
@@ -740,7 +741,7 @@ public sealed unsafe partial class DockWindow : WindowBase
                     Win32.SetWindowPos(Hwnd, 0 /* HWND_TOP */, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
                 return Win32.MA_NOACTIVATE;
             case 0x46: // WM_WINDOWPOSCHANGING: keep an always-on-bottom dock under everything
-                if (Opt.Layer == DockLayer.AlwaysOnBottom)
+                if (Opt.Layer == DockLayer.AlwaysOnBottom && !_popped)
                 {
                     var wp = (WINDOWPOS*)l;
                     if ((wp->flags & Win32.SWP_NOZORDER) == 0) wp->hwndInsertAfter = 1; // HWND_BOTTOM
@@ -785,6 +786,7 @@ public sealed unsafe partial class DockWindow : WindowBase
                     case AnimTimer: Tick(); break;
                     case RunningTimer: RefreshRunning(); break;
                     case RunningDebounce: Win32.KillTimer(Hwnd, RunningDebounce); RefreshRunning(); break;
+                    case PopTimer: PollPopUp(); break;
                     case HideTimer:
                         Win32.KillTimer(Hwnd, HideTimer);
                         if (_cursorU is null && !_app.StackOpen) { _hideWanted = true; Kick(); }
@@ -821,12 +823,49 @@ public sealed unsafe partial class DockWindow : WindowBase
     public void Close() => Win32.DestroyWindow(Hwnd);
 
     /// <summary>Z-order slot for <see cref="DockOptions.Layer"/>.</summary>
-    private nint InsertAfter => Opt.Layer switch
+    private nint InsertAfter => _popped ? Win32.HWND_TOPMOST : Opt.Layer switch
     {
         DockLayer.Normal => -2,         // HWND_NOTOPMOST
         DockLayer.AlwaysOnBottom => 1,  // HWND_BOTTOM
         _ => Win32.HWND_TOPMOST,
     };
+
+    // ---------------------------------------------------------------- pop up on mouse-over
+
+    private bool _popped;
+    private long _edgeSince;
+
+    /// <summary>
+    /// A dock that isn't always on top comes over other windows when the cursor rests on the screen edge
+    /// in front of it (RocketDock: "Pop up on mouse-over"), and goes back once the cursor leaves it.
+    /// Polled, because a covered dock gets no mouse messages.
+    /// </summary>
+    private void PollPopUp()
+    {
+        if (_userHidden || Items.Count == 0) return;
+        POINT pt;
+        Win32.GetCursorPos(&pt);
+        var (u, v) = ToEdge(pt.X - _winX, pt.Y - _winY);
+        var alongDock = u >= _u0[0] - 8 * _scale && u <= _u0[^1] + _len[^1] + 8 * _scale;
+
+        if (!_popped)
+        {
+            if (!Opt.PopUp || Opt.Layer == DockLayer.AlwaysOnTop || !alongDock || v < -1 || v > 2 * _scale) { _edgeSince = 0; return; }
+            var now = Environment.TickCount64;
+            if (_edgeSince == 0) _edgeSince = now;
+            if (now - _edgeSince < Opt.PopUpDelayMs) return;
+            _popped = true;
+            Win32.SetWindowPos(Hwnd, Win32.HWND_TOPMOST, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+            return;
+        }
+
+        // Stay up while the cursor is over the dock's band, a drag is running or a stack is open.
+        var over = alongDock && v >= -1 && v <= _thickness;
+        if (over || _dragging >= 0 || _app.StackOpen) return;
+        _popped = false;
+        _edgeSince = 0;
+        Win32.SetWindowPos(Hwnd, InsertAfter, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
+    }
 
     [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
     private struct WINDOWPOS { public nint hwnd, hwndInsertAfter; public int x, y, cx, cy; public uint flags; }

@@ -113,6 +113,7 @@ public static unsafe class Menus
         Add(edge, 190, "Always on top", o.Layer == DockLayer.AlwaysOnTop);
         Add(edge, 191, "Normal", o.Layer == DockLayer.Normal);
         Add(edge, 192, "Always on bottom", o.Layer == DockLayer.AlwaysOnBottom);
+        Add(edge, 193, "Pop up on mouse-over", o.PopUp, o.Layer != DockLayer.AlwaysOnTop);
 
         var size = Sub("Icon size");
         for (var i = 0; i < IconSizes.Length; i++) Add(size, (uint)(100 + i), $"{IconSizes[i]} px", o.IconSize == IconSizes[i]);
@@ -245,6 +246,7 @@ public static unsafe class Menus
             case >= 50 and <= 53: o.Edge = (DockEdge)(cmd - 50); break;
             case 54: o.Monitor = 0; break;
             case >= 190 and <= 192: o.Layer = (DockLayer)(cmd - 190); break;
+            case 193: o.PopUp = !o.PopUp; break;
             case >= 55 and <= 62: o.Monitor = (int)cmd - 54; break;
             case >= 100 and < 110: o.IconSize = IconSizes[cmd - 100]; o.MagnifiedSize = Math.Max(o.MagnifiedSize, o.IconSize); break;
             case 70: o.Magnify = !o.Magnify; break;

@@ -14,7 +14,7 @@ Effort is rough: **S** = an hour or two, **M** = a session, **L** = several sess
 - Running indicators, click to switch or minimise, launch bounce, drag to reorder, drag off to remove, lock.
 - Recycle Bin: drop to recycle, full/empty icon, Empty Recycle Bin.
 - Drag and drop onto items: the centre of an icon acts on it (open with the app, copy into a folder or stack, recycle); its edges and the gaps add new items.
-- Layering: always on top, normal (comes forward when clicked) or always on bottom.
+- Layering: always on top, normal (comes forward when clicked) or always on bottom, with pop up on mouse-over and a delay.
 - Ctrl-drag moves or removes icons even when locked; configurable show/hide hotkey (Ctrl+Alt+R by default), also on the dock menu.
 
 ## RocketDock features NETDock is missing
@@ -26,7 +26,7 @@ Effort is rough: **S** = an hour or two, **M** = a session, **L** = several sess
 | 3 | ~~**Ctrl-drag when locked**~~ (done) | Hold Ctrl to move or remove an item even when icons are locked. | S | Medium |
 | 4 | ~~**Show/hide hotkey**~~ (done) | Ctrl+Alt+R hides the dock completely and stops rendering it. | S | Medium |
 | 5 | ~~**Layering**~~ (done) | Always on top, Normal, or Always on bottom. NETDock is always on top. | S | Medium |
-| 6 | **Pop up on mouse-over + delay** | The dock comes over covering windows when the mouse reaches the edge. | S | Medium |
+| 6 | ~~**Pop up on mouse-over + delay**~~ (done) | The dock comes over covering windows when the mouse reaches the edge. | S | Medium |
 | 7 | **Auto-hide duration** | The slide speed is configurable. NETDock has only the delay. | S | Low |
 | 8 | **Label font and styling** | Font, size, colour, outline colour and opacity, shadow colour and opacity. | M | Medium |
 | 9 | **Background opacity** | Skin/panel transparency slider, separate from icon opacity. | S | Medium |

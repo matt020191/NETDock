@@ -197,6 +197,8 @@ public sealed unsafe class SettingsWindow : WindowBase
         Slider(ref y, "Centering", 0, 100, () => (int)Math.Round(Opt.Centre * 100), v => Opt.Centre = v / 100.0, v => $"{v}%");
         Slider(ref y, "Edge offset", 0, 100, () => Opt.EdgeOffset, v => Opt.EdgeOffset = v, v => $"{v}px");
         Combo(ref y, "Layering", ["Always on top", "Normal (in front when clicked)", "Always on bottom"], () => (int)Opt.Layer, v => Opt.Layer = (DockLayer)v);
+        Check(ref y, "Pop up on mouse-over (when not always on top)", () => Opt.PopUp, v => Opt.PopUp = v);
+        Slider(ref y, "Pop-up delay", 0, 2000, () => Opt.PopUpDelayMs, v => Opt.PopUpDelayMs = v, v => $"{v}ms");
     }
 
     private List<(string Name, string Reference, string? Source)> _skins = [];
