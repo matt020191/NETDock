@@ -122,6 +122,10 @@ public sealed class DockOptions
     public int IconOpacity { get; set; } = 100;
     /// <summary>Panel, skin or shelf opacity in %, separate from the icons (RocketDock: background opacity).</summary>
     public int BackgroundOpacity { get; set; } = 100;
+    /// <summary>Animation when an icon is clicked to launch (or has files dropped on it).</summary>
+    public IconEffect ClickEffect { get; set; } = IconEffect.Bounce;
+    /// <summary>Repeating animation while one of the app's windows flashes for attention.</summary>
+    public IconEffect AttentionEffect { get; set; } = IconEffect.Bounce;
     /// <summary>Magnified icons are drawn fully opaque whatever <see cref="IconOpacity"/> says.</summary>
     public bool ZoomOpaque { get; set; } = true;
     /// <summary>Roughly how long icons take to grow or shrink, in ms.</summary>

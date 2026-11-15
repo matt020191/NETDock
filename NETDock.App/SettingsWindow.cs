@@ -276,6 +276,9 @@ public sealed unsafe class SettingsWindow : WindowBase
     {
         _ui.Page = 5;
         float y = 60;
+        string[] effects = ["None", "Bounce", "Zoom", "Pulse", "Wobble"];
+        Combo(ref y, "Click effect (when launching)", effects, () => (int)Opt.ClickEffect, v => Opt.ClickEffect = (IconEffect)v);
+        Combo(ref y, "Attention effect (when an app's window flashes)", effects, () => (int)Opt.AttentionEffect, v => Opt.AttentionEffect = (IconEffect)v);
         Check(ref y, "Auto-hide", () => Opt.AutoHide, v => Opt.AutoHide = v);
         Slider(ref y, "Auto-hide delay", 0, 3000, () => Opt.AutoHideDelayMs, v => Opt.AutoHideDelayMs = v, v => $"{v}ms");
         Slider(ref y, "Auto-hide duration", 0, 1500, () => Opt.AutoHideDurationMs, v => Opt.AutoHideDurationMs = v, v => v == 0 ? "Instant" : $"{v}ms");

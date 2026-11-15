@@ -263,3 +263,21 @@ public class ArgbColorTests
         Assert.Equal("#80AABBCC", ArgbColor.WithRgb(c, 0, 0xAABBCC));
     }
 }
+
+public class IconEffectTests
+{
+    [Theory]
+    [InlineData(IconEffect.Bounce)]
+    [InlineData(IconEffect.Zoom)]
+    [InlineData(IconEffect.Pulse)]
+    [InlineData(IconEffect.Wobble)]
+    public void Effects_move_mid_run_and_rest_at_the_ends(IconEffect e)
+    {
+        Assert.Equal(EffectFrame.Rest, IconEffects.Sample(e, 0));
+        Assert.Equal(EffectFrame.Rest, IconEffects.Sample(e, IconEffects.Duration));
+        Assert.NotEqual(EffectFrame.Rest, IconEffects.Sample(e, 0.17));
+    }
+
+    [Fact]
+    public void None_never_moves() => Assert.Equal(EffectFrame.Rest, IconEffects.Sample(IconEffect.None, 0.2));
+}

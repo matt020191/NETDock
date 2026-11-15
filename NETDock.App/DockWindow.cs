@@ -46,7 +46,10 @@ public sealed unsafe partial class DockWindow : WindowBase
     private float _dragU, _dragV;
     /// <summary>This drag may reorder/remove: icons unlocked, or Ctrl held when it started.</summary>
     private bool _dragUnlocked;
-    private readonly Dictionary<string, long> _bounces = [];
+    /// <summary>Running icon effects: item id -> (start tick, effect). Attention ones loop while the id is in <see cref="_attention"/>.</summary>
+    private readonly Dictionary<string, (long Start, IconEffect Effect)> _effects = [];
+    /// <summary>Exe path (lower-case) per item id whose window is flashing for attention.</summary>
+    private readonly Dictionary<string, string> _attention = [];
     private double _hide; // 0 shown, 1 hidden
     private bool _hideWanted;
     /// <summary>Linear slide progress (0 shown, 1 hidden); <c>_hide</c> is its eased value.</summary>
@@ -374,9 +377,12 @@ public sealed unsafe partial class DockWindow : WindowBase
                 s.FillRect(a, new D2DColor(1, 1, 1, 0.35f));
                 continue;
             }
-            var bounce = BounceOffset(item.Id, now);
+            var fx = EffectFor(item.Id, now);
+            var bounce = (float)(fx.Lift * _base);
             var v0 = _iconV0 + bounce - off;
-            var rect = ToWindow(_u0[i], _u0[i] + _len[i], v0, v0 + _len[i]);
+            var fxLen = (float)(_len[i] * fx.Scale);
+            var fxU0 = _u0[i] + (_len[i] - fxLen) / 2 + (float)(fx.Shift * _base);
+            var rect = ToWindow(fxU0, fxU0 + fxLen, v0, v0 + fxLen);
             var bmp = Bitmap(item);
             if (bmp == 0)
             {
@@ -396,6 +402,7 @@ public sealed unsafe partial class DockWindow : WindowBase
             var opacity = Opt.IconOpacity / 100f;
             if (Opt.ZoomOpaque && _scales[i] > 1.02) opacity += (1 - opacity) * (float)Math.Min(1, (_scales[i] - 1) / 0.25);
             if (i == _down && _dragging < 0) opacity *= 0.7f;
+            opacity *= (float)fx.Alpha;
             s.DrawBitmap(bmp, rect, opacity);
 
             if (Opt.ShowRunningIndicators && IsRunning(item))
@@ -469,14 +476,46 @@ public sealed unsafe partial class DockWindow : WindowBase
         _surface.DrawText(text, _labelFormat, r, D2DColor.Parse(Opt.LabelColor, 0xFFFFFFFF));
     }
 
-    private float BounceOffset(string id, long now)
+    private EffectFrame EffectFor(string id, long now)
     {
-        if (!_bounces.TryGetValue(id, out var start)) return 0;
-        var t = (now - start) / 1000.0;
-        if (t > 1.2) { _bounces.Remove(id); return 0; }
-        // Two decaying hops.
-        var hop = Math.Abs(Math.Sin(t * Math.PI * 2.5)) * Math.Exp(-t * 2.2);
-        return (float)(hop * _base * 0.5);
+        if (!_effects.TryGetValue(id, out var fx)) return EffectFrame.Rest;
+        var t = (now - fx.Start) / 1000.0;
+        if (t >= IconEffects.Duration)
+        {
+            if (_attention.ContainsKey(id)) { t %= IconEffects.Duration + 0.4; } // loop, with a short rest between runs
+            else { _effects.Remove(id); return EffectFrame.Rest; }
+        }
+        return IconEffects.Sample(fx.Effect, t);
+    }
+
+    private void StartEffect(DockItem item, IconEffect effect)
+    {
+        if (effect == IconEffect.None) return;
+        _effects[item.Id] = (Environment.TickCount64, effect);
+        Kick();
+    }
+
+    /// <summary>HSHELL_FLASH: a window wants attention; animate the icon of its app until it is activated.</summary>
+    private void OnFlash(nint hwnd)
+    {
+        if (Opt.AttentionEffect == IconEffect.None || RunningApps.PathOf(hwnd) is not { } exe) return;
+        foreach (var item in Items)
+        {
+            if (RunningApps.ExeFor(item, _app.Tokens) is not { } itemExe || !string.Equals(itemExe, exe, StringComparison.OrdinalIgnoreCase)) continue;
+            if (_attention.ContainsKey(item.Id)) return;
+            _attention[item.Id] = exe;
+            StartEffect(item, Opt.AttentionEffect);
+            return;
+        }
+    }
+
+    /// <summary>A window was activated: stop the attention loop of its app.</summary>
+    private void OnActivated(nint hwnd)
+    {
+        if (_attention.Count == 0) return;
+        var exe = hwnd == 0 ? null : RunningApps.PathOf(hwnd);
+        foreach (var (id, attExe) in _attention.ToList())
+            if (exe is not null && string.Equals(attExe, exe, StringComparison.OrdinalIgnoreCase)) _attention.Remove(id);
     }
 
     private int IconPixelSize()
@@ -544,7 +583,7 @@ public sealed unsafe partial class DockWindow : WindowBase
             moving = _hideP != hideTarget || moving;
         }
         _hide = _hideP * _hideP * (3 - 2 * _hideP); // smoothstep
-        if (_bounces.Count > 0 || _dragging >= 0) moving = true;
+        if (_effects.Count > 0 || _dragging >= 0) moving = true;
 
         if (_cursorU is { } cu) _hover = HitTest(cu, _cursorV);
         Render();
@@ -561,6 +600,9 @@ public sealed unsafe partial class DockWindow : WindowBase
     private void RefreshRunning()
     {
         _running = RunningApps.Snapshot();
+        // An app that closed while flashing stops asking for attention.
+        foreach (var (id, exe) in _attention.ToList())
+            if (!_running.ContainsKey(exe)) _attention.Remove(id);
         Render();
     }
 
@@ -597,8 +639,7 @@ public sealed unsafe partial class DockWindow : WindowBase
             return;
         }
         Launcher.Launch(item, _app.Tokens, elevate);
-        _bounces[item.Id] = Environment.TickCount64;
-        Kick();
+        StartEffect(item, Opt.ClickEffect);
         Win32.SetTimer(Hwnd, RunningDebounce, 1500, 0);
     }
 
@@ -738,8 +779,7 @@ public sealed unsafe partial class DockWindow : WindowBase
 
     private void Bounce(DockItem item)
     {
-        _bounces[item.Id] = Environment.TickCount64;
-        Kick();
+        StartEffect(item, Opt.ClickEffect);
     }
 
     [System.Runtime.InteropServices.LibraryImport("shell32.dll")]
@@ -766,6 +806,12 @@ public sealed unsafe partial class DockWindow : WindowBase
     {
         if (msg == _shellHookMsg && _shellHookMsg != 0)
         {
+            // HSHELL_FLASH (0x8006) asks for attention; HSHELL_WINDOWACTIVATED / RUDEAPPACTIVATED (4 / 0x8004) end it.
+            switch ((int)w)
+            {
+                case 0x8006: OnFlash(l); return 0;
+                case 4 or 0x8004: OnActivated(l); break;
+            }
             // HSHELL_WINDOWCREATED / DESTROYED / ACTIVATED all mean the running set may have changed.
             Win32.SetTimer(Hwnd, RunningDebounce, 150, 0);
             return 0;

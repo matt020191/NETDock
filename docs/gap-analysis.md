@@ -30,7 +30,7 @@ Effort is rough: **S** = an hour or two, **M** = a session, **L** = several sess
 | 7 | ~~**Auto-hide duration**~~ (done) | The slide speed is configurable. NETDock has only the delay. | S | Low |
 | 8 | ~~**Label font and styling**~~ (done) | Font, size, colour, outline colour and opacity, shadow colour and opacity. | M | Medium |
 | 9 | ~~**Background opacity**~~ (done) | Skin/panel transparency slider, separate from icon opacity. | S | Medium |
-| 10 | **Icon attention effects** | A choice of click animation (bounce, zoom, pulse, ...). Also used when a minimised window flashes for attention. | M | Low |
+| 10 | ~~**Icon attention effects**~~ (done) | A choice of click animation (bounce, zoom, pulse, ...). Also used when a minimised window flashes for attention. | M | Low |
 | 11 | **Icon state dropdown** | Icon Settings can pick the *full* Recycle Bin icon. The model has `IconFull` and import fills it, but the dialog can't edit it yet. | S | Medium |
 | 12 | **Special items** | *Add item → Dock Settings* and *Quit* icons. | S | Low |
 | 13 | **Minimise windows to the dock** | Minimised windows become dock icons with live previews. A big feature that RocketDock was often unstable with. | L | Optional |

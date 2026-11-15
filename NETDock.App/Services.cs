@@ -268,6 +268,14 @@ public static unsafe class RunningApps
         finally { Win32.CloseHandle(h); }
     }
 
+    /// <summary>Image path of the process that owns a window.</summary>
+    public static string? PathOf(nint hwnd)
+    {
+        uint pid;
+        Win32.GetWindowThreadProcessId(hwnd, &pid);
+        return pid == 0 ? null : ProcessPath(pid);
+    }
+
     public static void Activate(nint hwnd)
     {
         if (Win32.IsIconic(hwnd)) Win32.ShowWindow(hwnd, Win32.SW_RESTORE);
