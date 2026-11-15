@@ -26,6 +26,9 @@ public enum RunWindow { Normal, Minimized, Maximized }
 /// <summary>What clicking an item does when its program is already running.</summary>
 public enum OpenRunning { UseGlobal, SwitchTo, NewInstance }
 
+/// <summary>Where the dock sits among other windows (RocketDock: Layering).</summary>
+public enum DockLayer { AlwaysOnTop, Normal, AlwaysOnBottom }
+
 public enum StackSort { Name, DateModified, DateCreated, Kind }
 
 /// <summary>
@@ -123,6 +126,7 @@ public sealed class DockOptions
     public int ZoomDurationMs { get; set; } = 150;
     /// <summary>Global hotkey that hides or shows the whole dock (RocketDock: Ctrl+Alt+R). Blank = none.</summary>
     public string? ToggleHotkey { get; set; } = "Ctrl+Alt+R";
+    public DockLayer Layer { get; set; } = DockLayer.AlwaysOnTop;
     public bool AutoHide { get; set; }
     public int AutoHideDelayMs { get; set; } = 600;
     public bool ShowLabels { get; set; } = true;

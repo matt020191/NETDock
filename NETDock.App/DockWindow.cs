@@ -123,7 +123,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         };
         _winX = x; _winY = y;
         _surface.EnsureSize(w, h);
-        Win32.SetWindowPos(Hwnd, Win32.HWND_TOPMOST, x, y, w, h, Win32.SWP_NOACTIVATE);
+        Win32.SetWindowPos(Hwnd, InsertAfter, x, y, w, h, Win32.SWP_NOACTIVATE);
         foreach (var b in _bitmaps.Values) { var p = b; Com.Release(ref p); }
         _bitmaps.Clear();
         _scales = new double[Items.Count];
@@ -735,7 +735,17 @@ public sealed unsafe partial class DockWindow : WindowBase
         switch (msg)
         {
             case Win32.WM_MOUSEACTIVATE:
+                // Normal layering: a click brings the dock in front of other windows (without taking focus).
+                if (Opt.Layer == DockLayer.Normal)
+                    Win32.SetWindowPos(Hwnd, 0 /* HWND_TOP */, 0, 0, 0, 0, Win32.SWP_NOMOVE | Win32.SWP_NOSIZE | Win32.SWP_NOACTIVATE);
                 return Win32.MA_NOACTIVATE;
+            case 0x46: // WM_WINDOWPOSCHANGING: keep an always-on-bottom dock under everything
+                if (Opt.Layer == DockLayer.AlwaysOnBottom)
+                {
+                    var wp = (WINDOWPOS*)l;
+                    if ((wp->flags & Win32.SWP_NOZORDER) == 0) wp->hwndInsertAfter = 1; // HWND_BOTTOM
+                }
+                break;
             case Win32.WM_MOUSEMOVE:
                 OnMouseMove(Win32.LoWord(l), Win32.HiWord(l));
                 return 0;
@@ -809,6 +819,17 @@ public sealed unsafe partial class DockWindow : WindowBase
     }
 
     public void Close() => Win32.DestroyWindow(Hwnd);
+
+    /// <summary>Z-order slot for <see cref="DockOptions.Layer"/>.</summary>
+    private nint InsertAfter => Opt.Layer switch
+    {
+        DockLayer.Normal => -2,         // HWND_NOTOPMOST
+        DockLayer.AlwaysOnBottom => 1,  // HWND_BOTTOM
+        _ => Win32.HWND_TOPMOST,
+    };
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct WINDOWPOS { public nint hwnd, hwndInsertAfter; public int x, y, cx, cy; public uint flags; }
 
     // ---------------------------------------------------------------- show/hide hotkey
 
