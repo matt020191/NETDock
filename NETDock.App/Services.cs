@@ -91,10 +91,11 @@ public sealed class IconService
 /// <summary>Starts things. Never edits the item it is given.</summary>
 public static unsafe class Launcher
 {
-    public static void Launch(DockItem item, PathTokens tokens, bool elevate = false)
+    /// <param name="arguments">Replaces the item's own arguments (used to open dropped files with it).</param>
+    public static void Launch(DockItem item, PathTokens tokens, bool elevate = false, string? arguments = null)
     {
         var target = tokens.Expand(item.Target) ?? "";
-        var args = item.Arguments;
+        var args = arguments ?? item.Arguments;
         string? dir = tokens.Expand(item.WorkingDirectory);
 
         if (item.Kind == ItemKind.Shortcut)
@@ -179,23 +180,8 @@ public static unsafe class RecycleBinService
     }
 
     /// <summary>Send files to the Recycle Bin, with the shell's usual confirmation and progress UI.</summary>
-    public static void Recycle(nint owner, IReadOnlyList<string> paths)
-    {
-        if (paths.Count == 0) return;
-        var from = string.Join('\0', paths) + "\0\0"; // double-null-terminated list
-        var t = new Thread(() =>
-        {
-            Win32.CoInitializeEx(0, 2);
-            fixed (char* f = from)
-            {
-                var op = new SHFILEOPSTRUCTW { hwnd = owner, wFunc = 3 /* FO_DELETE */, pFrom = f, fFlags = 0x40 /* FOF_ALLOWUNDO: recycle */ };
-                Win32.SHFileOperation(&op);
-            }
-            Poll();
-        }) { IsBackground = true };
-        t.SetApartmentState(ApartmentState.STA);
-        t.Start();
-    }
+    public static void Recycle(nint owner, IReadOnlyList<string> paths) =>
+        ShellFiles.Run(owner, 3 /* FO_DELETE + FOF_ALLOWUNDO = recycle */, paths, null);
 
     public static void Empty(nint owner)
     {
@@ -204,6 +190,34 @@ public static unsafe class RecycleBinService
             Win32.CoInitializeEx(0, 2);
             Win32.SHEmptyRecycleBin(owner, null, 0); // shell asks for confirmation
             Poll();
+        }) { IsBackground = true };
+        t.SetApartmentState(ApartmentState.STA);
+        t.Start();
+    }
+}
+
+/// <summary>Explorer-style file operations (conflict prompts, progress, undo) on a background thread.</summary>
+public static unsafe class ShellFiles
+{
+    /// <summary>Copy files and folders into a folder, as dropping them on it in Explorer would.</summary>
+    public static void CopyInto(nint owner, IReadOnlyList<string> paths, string folder) =>
+        Run(owner, 2 /* FO_COPY */, paths, folder);
+
+    public static void Run(nint owner, uint func, IReadOnlyList<string> paths, string? dest)
+    {
+        if (paths.Count == 0) return;
+        var from = string.Join('\0', paths) + "\0\0"; // double-null-terminated lists
+        var to = dest is null ? null : dest + "\0\0";
+        var t = new Thread(() =>
+        {
+            Win32.CoInitializeEx(0, 2);
+            fixed (char* f = from)
+            fixed (char* d = to)
+            {
+                var op = new SHFILEOPSTRUCTW { hwnd = owner, wFunc = func, pFrom = f, pTo = to is null ? null : d, fFlags = 0x40 /* FOF_ALLOWUNDO */ };
+                Win32.SHFileOperation(&op);
+            }
+            if (func == 3) RecycleBinService.Poll();
         }) { IsBackground = true };
         t.SetApartmentState(ApartmentState.STA);
         t.Start();

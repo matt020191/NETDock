@@ -195,3 +195,51 @@ public class RecycleBinTests
     public void Only_the_bin_target_counts() =>
         Assert.False(RecycleBin.Is(new DockItem { Target = @"%SystemRoot%\explorer.exe" }));
 }
+
+public class DropRuleTests
+{
+    private static readonly DockItem App = new() { Kind = ItemKind.App, Target = @"%ProgramFiles%\Adobe\Photoshop.exe" };
+    private static readonly DockItem Stack = new() { Kind = ItemKind.Stack, Target = @"C:\Games" };
+    private static readonly DockItem Bin = new() { Target = RecycleBin.Target };
+    private static readonly DockItem ThisPc = new() { Target = "::{20D04FE0-3AEA-1069-A2D8-08002B30309D}" };
+
+    [Theory]
+    [InlineData(0.5, DropAction.OpenWith)]
+    [InlineData(0.25, DropAction.OpenWith)]
+    [InlineData(0.1, DropAction.Insert)]
+    [InlineData(0.95, DropAction.Insert)]
+    public void Centre_of_an_app_opens_edges_insert(double pos, DropAction expected) =>
+        Assert.Equal(expected, DropRules.Decide(App, pos));
+
+    [Fact]
+    public void Folders_copy_bin_recycles_gaps_and_shell_folders_insert()
+    {
+        Assert.Equal(DropAction.CopyInto, DropRules.Decide(Stack, 0.5));
+        Assert.Equal(DropAction.Recycle, DropRules.Decide(Bin, 0.5));
+        Assert.Equal(DropAction.Insert, DropRules.Decide(null, 0.5));
+        Assert.Equal(DropAction.Insert, DropRules.Decide(new DockItem { Kind = ItemKind.Separator }, 0.5));
+        Assert.Equal(DropAction.Insert, DropRules.Decide(ThisPc, 0.5));
+    }
+
+    [Fact]
+    public void Open_with_arguments_quote_each_path_after_existing_ones() =>
+        Assert.Equal(@"-new ""C:\a b.png"" ""D:\c.png""", DropRules.OpenWithArguments("-new", [@"C:\a b.png", @"D:\c.png"]));
+}
+
+public class HotkeyTests
+{
+    [Theory]
+    [InlineData("Ctrl+Alt+R", Hotkey.Ctrl | Hotkey.Alt, (uint)'R')]
+    [InlineData("ctrl + shift + f12", Hotkey.Ctrl | Hotkey.Shift, 0x7Bu)]
+    [InlineData("Win+Space", Hotkey.Win, 0x20u)]
+    [InlineData("Alt+1", Hotkey.Alt, (uint)'1')]
+    public void Parses(string text, uint mods, uint vk) => Assert.Equal(new Hotkey(mods, vk), Hotkey.Parse(text));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("R")]              // no modifier: would swallow a normal key
+    [InlineData("Ctrl+Alt")]       // no key
+    [InlineData("Ctrl+R+T")]       // two keys
+    [InlineData("Ctrl+Banana")]
+    public void Rejects(string text) => Assert.Null(Hotkey.Parse(text));
+}

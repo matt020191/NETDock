@@ -121,6 +121,8 @@ public sealed class DockOptions
     public bool ZoomOpaque { get; set; } = true;
     /// <summary>Roughly how long icons take to grow or shrink, in ms.</summary>
     public int ZoomDurationMs { get; set; } = 150;
+    /// <summary>Global hotkey that hides or shows the whole dock (RocketDock: Ctrl+Alt+R). Blank = none.</summary>
+    public string? ToggleHotkey { get; set; } = "Ctrl+Alt+R";
     public bool AutoHide { get; set; }
     public int AutoHideDelayMs { get; set; } = 600;
     public bool ShowLabels { get; set; } = true;

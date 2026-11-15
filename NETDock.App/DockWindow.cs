@@ -44,6 +44,8 @@ public sealed unsafe partial class DockWindow : WindowBase
     private int _down = -1, _dragging = -1;
     private POINT _downPt;
     private float _dragU, _dragV;
+    /// <summary>This drag may reorder/remove: icons unlocked, or Ctrl held when it started.</summary>
+    private bool _dragUnlocked;
     private readonly Dictionary<string, long> _bounces = [];
     private double _hide; // 0 shown, 1 hidden
     private bool _hideWanted;
@@ -65,6 +67,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         Win32.RegisterShellHookWindow(Hwnd);
         Win32.SetTimer(Hwnd, RunningTimer, 3000, 0); // backstop for windows the hook misses
         RecycleBinService.Start(Hwnd);
+        RegisterToggleHotkey();
         Relayout();
         RefreshRunning();
         Win32.ShowWindow(Hwnd, Win32.SW_SHOWNOACTIVATE);
@@ -398,7 +401,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         if (_dragging >= 0 && _dragging < n && Bitmap(Items[_dragging]) is var db && db != 0)
         {
             var sz = _base * 1.1f;
-            var leaving = !Opt.Locked && _dragV > _thickness + _base * 0.25f;
+            var leaving = _dragUnlocked && _dragV > _thickness + _base * 0.25f;
             var r = ToWindow(_dragU - sz / 2, _dragU + sz / 2, _dragV - sz / 2, _dragV + sz / 2);
             s.DrawBitmap(db, r, leaving ? 0.35f : 0.9f);
         }
@@ -583,9 +586,12 @@ public sealed unsafe partial class DockWindow : WindowBase
         Win32.KillTimer(Hwnd, HideTimer);
         if (_hideWanted) { _hideWanted = false; }
 
-        if (_down >= 0 && _dragging < 0 && !Opt.Locked
+        if (_down >= 0 && _dragging < 0 && (!Opt.Locked || Win32.GetKeyState(0x11) < 0)
             && (Math.Abs(x - _downPt.X) > 6 * _scale || Math.Abs(y - _downPt.Y) > 6 * _scale))
+        {
             _dragging = _down;
+            _dragUnlocked = true;
+        }
         if (_dragging >= 0)
         {
             _dragU = u; _dragV = v;
@@ -625,7 +631,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         var (u, v) = ToEdge(x, y);
         if (_dragging >= 0)
         {
-            var leaving = !Opt.Locked && (v > _thickness + _base * 0.25f || v < -_base);
+            var leaving = _dragUnlocked && (v > _thickness + _base * 0.25f || v < -_base);
             if (leaving) Items.RemoveAt(_dragging);
             _dragging = _down = -1;
             _app.Save();
@@ -652,29 +658,50 @@ public sealed unsafe partial class DockWindow : WindowBase
         DragQueryPoint(hdrop, &pt);
         var (u, v) = ToEdge(pt.X, pt.Y);
         var count = Win32.DragQueryFile(hdrop, 0xFFFFFFFF, null, 0);
-        if (HitTest(u, v) is var target and >= 0 && RecycleBin.Is(Items[target]))
-        {
-            var paths = new List<string>();
-            var pbuf = stackalloc char[2048];
-            for (uint i = 0; i < count; i++)
-                paths.Add(new string(pbuf, 0, (int)Win32.DragQueryFile(hdrop, i, pbuf, 2048)));
-            Win32.DragFinish(hdrop);
-            RecycleBinService.Recycle(Hwnd, paths);
-            _bounces[Items[target].Id] = Environment.TickCount64;
-            Kick();
-            return;
-        }
-        var at = Items.Count == 0 ? 0 : Math.Clamp(InsertIndex(u) + (u > _u0[^1] + _len[^1] / 2 ? 1 : 0), 0, Items.Count);
+        var paths = new List<string>();
         var buf = stackalloc char[2048];
         for (uint i = 0; i < count; i++)
-        {
-            var len = Win32.DragQueryFile(hdrop, i, buf, 2048);
-            var path = new string(buf, 0, (int)len);
-            if (ItemFactory.FromPath(path, _app.Tokens) is { } item) Items.Insert(Math.Min(at++, Items.Count), item);
-        }
+            paths.Add(new string(buf, 0, (int)Win32.DragQueryFile(hdrop, i, buf, 2048)));
         Win32.DragFinish(hdrop);
+        if (paths.Count == 0) return;
+
+        // The centre of an icon acts on it; its edges and the gaps add new items (see DropRules).
+        var hit = HitTest(u, v);
+        var target = hit >= 0 ? Items[hit] : null;
+        var across = hit >= 0 && _len[hit] > 0 ? (u - _u0[hit]) / _len[hit] : 0.5f;
+        switch (DropRules.Decide(target, across))
+        {
+            case DropAction.Recycle:
+                RecycleBinService.Recycle(Hwnd, paths);
+                Bounce(target!);
+                return;
+            case DropAction.CopyInto:
+                if (_app.Tokens.Expand(target!.Target) is { } folder && Directory.Exists(folder))
+                {
+                    ShellFiles.CopyInto(Hwnd, paths, folder);
+                    Bounce(target);
+                    return;
+                }
+                break;
+            case DropAction.OpenWith:
+                Launcher.Launch(target!, _app.Tokens, arguments: DropRules.OpenWithArguments(target!.Arguments, paths));
+                Bounce(target);
+                return;
+        }
+
+        int at;
+        if (hit >= 0) at = across < 0.5f ? hit : hit + 1;
+        else at = Items.Count == 0 ? 0 : Math.Clamp(InsertIndex(u) + (u > _u0[^1] + _len[^1] / 2 ? 1 : 0), 0, Items.Count);
+        foreach (var path in paths)
+            if (ItemFactory.FromPath(path, _app.Tokens) is { } item) Items.Insert(Math.Min(at++, Items.Count), item);
         _app.Save();
         Relayout();
+    }
+
+    private void Bounce(DockItem item)
+    {
+        _bounces[item.Id] = Environment.TickCount64;
+        Kick();
     }
 
     [System.Runtime.InteropServices.LibraryImport("shell32.dll")]
@@ -758,6 +785,9 @@ public sealed unsafe partial class DockWindow : WindowBase
                 _app.Icons.Acknowledge();
                 Render();
                 return 0;
+            case 0x312: // WM_HOTKEY
+                if (w == HotkeyId) ToggleVisible();
+                return 0;
             case RecycleBinService.WM_BIN_CHANGED:
                 Render();
                 return 0;
@@ -779,6 +809,43 @@ public sealed unsafe partial class DockWindow : WindowBase
     }
 
     public void Close() => Win32.DestroyWindow(Hwnd);
+
+    // ---------------------------------------------------------------- show/hide hotkey
+
+    private const int HotkeyId = 1;
+    private bool _userHidden;
+    public bool IsUserHidden => _userHidden;
+
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static partial bool RegisterHotKey(nint h, int id, uint mods, uint vk);
+    [System.Runtime.InteropServices.LibraryImport("user32.dll")]
+    [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+    private static partial bool UnregisterHotKey(nint h, int id);
+
+    /// <summary>(Re)register the hotkey from settings. False if another program already owns it.</summary>
+    public bool RegisterToggleHotkey()
+    {
+        UnregisterHotKey(Hwnd, HotkeyId);
+        if (Hotkey.Parse(Opt.ToggleHotkey) is not { } k) return true;
+        return RegisterHotKey(Hwnd, HotkeyId, k.Modifiers | 0x4000 /* MOD_NOREPEAT */, k.VirtualKey);
+    }
+
+    /// <summary>Hide the dock completely (no drawing, no hit area) or bring it back.</summary>
+    public void ToggleVisible()
+    {
+        _userHidden = !_userHidden;
+        if (_userHidden)
+        {
+            _app.Stack.Close();
+            Win32.ShowWindow(Hwnd, Win32.SW_HIDE);
+        }
+        else
+        {
+            Win32.ShowWindow(Hwnd, Win32.SW_SHOWNOACTIVATE);
+            Render();
+        }
+    }
 }
 
 public readonly record struct MonitorInfo(RECT Bounds, RECT Work, uint Dpi);

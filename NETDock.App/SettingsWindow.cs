@@ -231,6 +231,23 @@ public sealed unsafe class SettingsWindow : WindowBase
         Combo(ref y, "Clicking a program that is already running", ["Switches to it (click again to minimise)", "Starts another copy"],
             () => Opt.ActivateIfRunning ? 0 : 1, v => Opt.ActivateIfRunning = v == 0);
         _ui.Label("Shift+click or middle-click always starts another copy; Ctrl+Shift+click runs as administrator.", X, y, Wide, 40);
+        y += 50;
+        _ui.Label("Show/hide hotkey", X, y, Wide);
+        var id = Id();
+        var edit = _ui.Edit(Opt.ToggleHotkey ?? "", X + 70, y + 22, 180, id);
+        var status = _ui.Label("", X + 260, y + 25, 220);
+        void Validate()
+        {
+            var text = Layout.Text(edit);
+            Opt.ToggleHotkey = text.Length == 0 ? null : text;
+            var ok = Hotkey.Parse(text) is not null || text.Length == 0;
+            var registered = ok && _app.Dock.RegisterToggleHotkey();
+            Ui.SetWindowText(status, text.Length == 0 ? "No hotkey" : !ok ? "Not a valid key, e.g. Ctrl+Alt+R" : registered ? "\u2713 Active" : "In use by another program");
+        }
+        _onCommand[id] = code => { if (code == Ui.EN_CHANGE) Validate(); };
+        _refresh.Add(() => { Ui.SetWindowText(edit, Opt.ToggleHotkey ?? ""); Validate(); });
+        Validate();
+        _ui.Label("Hides the whole dock until pressed again. Ctrl-drag moves or removes icons even when they are locked.", X, y + 56, Wide, 40);
     }
 
     private void BuildAbout()
@@ -261,6 +278,7 @@ public sealed unsafe class SettingsWindow : WindowBase
             _app.Settings.Dock = JsonSerializer.Deserialize(_snapshot, SettingsJson.Default.DockOptions)!;
             _app.Settings.Sanitize();
             _app.Dock.Relayout();
+            _app.Dock.RegisterToggleHotkey();
         }
         Win32.DestroyWindow(Hwnd);
     }

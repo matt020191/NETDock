@@ -13,15 +13,17 @@ Effort is rough: **S** = an hour or two, **M** = a session, **L** = several sess
 - Portable mode, zip backup and restore, RocketDock import that repairs x86 paths and orphaned stacks.
 - Running indicators, click to switch or minimise, launch bounce, drag to reorder, drag off to remove, lock.
 - Recycle Bin: drop to recycle, full/empty icon, Empty Recycle Bin.
+- Drag and drop onto items: the centre of an icon acts on it (open with the app, copy into a folder or stack, recycle); its edges and the gaps add new items.
+- Ctrl-drag moves or removes icons even when locked; configurable show/hide hotkey (Ctrl+Alt+R by default), also on the dock menu.
 
 ## RocketDock features NETDock is missing
 
 | # | Feature | What RocketDock does | Effort | Priority |
 |---|---------|----------------------|--------|----------|
-| 1 | **Drop onto an app** | A file dropped on an app icon opens in that app (PNG on Photoshop). NETDock adds it as a new item instead. | S | High |
-| 2 | **Drop onto a folder or stack** | Copies the file into that folder, like Explorer. NETDock adds it as a new item instead. | S | High |
-| 3 | **Ctrl-drag when locked** | Hold Ctrl to move or remove an item even when icons are locked. | S | Medium |
-| 4 | **Show/hide hotkey** | Ctrl+Alt+R hides the dock completely and stops rendering it. | S | Medium |
+| 1 | ~~**Drop onto an app**~~ (done) | A file dropped on an app icon opens in that app (PNG on Photoshop). NETDock adds it as a new item instead. | S | High |
+| 2 | ~~**Drop onto a folder or stack**~~ (done) | Copies the file into that folder, like Explorer. NETDock adds it as a new item instead. | S | High |
+| 3 | ~~**Ctrl-drag when locked**~~ (done) | Hold Ctrl to move or remove an item even when icons are locked. | S | Medium |
+| 4 | ~~**Show/hide hotkey**~~ (done) | Ctrl+Alt+R hides the dock completely and stops rendering it. | S | Medium |
 | 5 | **Layering** | Always on top, Normal, or Always on bottom. NETDock is always on top. | S | Medium |
 | 6 | **Pop up on mouse-over + delay** | The dock comes over covering windows when the mouse reaches the edge. | S | Medium |
 | 7 | **Auto-hide duration** | The slide speed is configurable. NETDock has only the delay. | S | Low |

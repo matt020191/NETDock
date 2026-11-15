@@ -137,7 +137,7 @@ public static unsafe class Menus
         Add(view2, 82, "Running indicators", o.ShowRunningIndicators);
         Add(view2, 85, "Clicking a running app switches to it", o.ActivateIfRunning);
         Add(view2, 83, "Auto-hide", o.AutoHide);
-        Add(view2, 84, "Lock icons", o.Locked);
+        Add(view2, 84, "Lock icons (Ctrl-drag still moves them)", o.Locked);
         Sep(view2);
         Add(view2, 95, "Start with Windows", App.StartsWithWindows);
 
@@ -151,6 +151,7 @@ public static unsafe class Menus
             app.Store.Location.IsPortable, !app.Store.Location.IsPortable);
 
         Sep(m);
+        Add(m, 97, Hotkey.Parse(o.ToggleHotkey) is null ? "Hide dock" : $"Hide dock\t{o.ToggleHotkey}");
         Add(m, 99, "Exit NETDock");
 
         Win32.SetForegroundWindow(dock.Hwnd);
@@ -210,6 +211,7 @@ public static unsafe class Menus
             case 13 when item is not null:
                 IconSettingsDialog.Show(app, item);
                 return;
+            case 97: dock.ToggleVisible(); return;
             case 98:
                 SettingsWindow.Show(app);
                 return;

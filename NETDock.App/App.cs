@@ -197,6 +197,7 @@ public sealed unsafe partial class App
 
     public void OnTray(DockWindow dock, uint mouseMsg)
     {
+        if (mouseMsg == Win32.WM_LBUTTONUP && dock.IsUserHidden) { dock.ToggleVisible(); return; }
         if (mouseMsg is Win32.WM_RBUTTONUP or Win32.WM_LBUTTONUP)
         {
             POINT p;
