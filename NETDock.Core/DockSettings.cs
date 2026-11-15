@@ -120,6 +120,8 @@ public sealed class DockOptions
     public double Centre { get; set; } = 0.5;
     /// <summary>Icon opacity at rest, 10-100 %.</summary>
     public int IconOpacity { get; set; } = 100;
+    /// <summary>Panel, skin or shelf opacity in %, separate from the icons (RocketDock: background opacity).</summary>
+    public int BackgroundOpacity { get; set; } = 100;
     /// <summary>Magnified icons are drawn fully opaque whatever <see cref="IconOpacity"/> says.</summary>
     public bool ZoomOpaque { get; set; } = true;
     /// <summary>Roughly how long icons take to grow or shrink, in ms.</summary>
@@ -179,6 +181,7 @@ public sealed class DockSettings
         d.SeparatorSpacing = Math.Clamp(d.SeparatorSpacing, 0, 64);
         d.PanelPadding = Math.Clamp(d.PanelPadding, 0, 32);
         d.IconOpacity = Math.Clamp(d.IconOpacity, 10, 100);
+        d.BackgroundOpacity = Math.Clamp(d.BackgroundOpacity, 0, 100);
         d.ZoomDurationMs = Math.Clamp(d.ZoomDurationMs, 30, 1000);
         IconFolders ??= [];
         IconFolders.RemoveAll(string.IsNullOrWhiteSpace);

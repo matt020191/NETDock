@@ -240,6 +240,10 @@ public sealed unsafe class LayeredSurface : IDisposable
         Com.Release(ref coll);
         return brush;
     }
+    /// <summary>ID2D1Brush::SetOpacity.</summary>
+    public static void SetBrushOpacity(nint brush, float opacity) =>
+        ((delegate* unmanaged<nint, float, void>)Com.Vt(brush)[4])(brush, opacity);
+
     public static void SetGradientLine(nint brush, D2DPoint a, D2DPoint b)
     {
         ((delegate* unmanaged<nint, D2DPoint, void>)Com.Vt(brush)[8])(brush, a);

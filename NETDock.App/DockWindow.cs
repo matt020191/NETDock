@@ -207,6 +207,10 @@ public sealed unsafe partial class DockWindow : WindowBase
     }
 
     /// <summary>Stretch a 9-slice image over dest: corners fixed, edges and centre stretched.</summary>
+    /// <summary>Background opacity (0..1) applied to the panel, skin, shelf and separators.</summary>
+    private float BgA => Opt.BackgroundOpacity / 100f;
+    private D2DColor Bg(D2DColor c) => new(c.R, c.G, c.B, c.A * BgA);
+
     private void NineSlice(nint bmp, int iw, int ih, D2DRect dest, int l, int t, int r, int b)
     {
         float sl = l * _scale, st = t * _scale, sr = r * _scale, sb = b * _scale;
@@ -218,7 +222,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         for (var xi = 0; xi < 3; xi++)
         {
             if (dx[xi + 1] <= dx[xi] || dy[yi + 1] <= dy[yi] || sx[xi + 1] <= sx[xi] || sy[yi + 1] <= sy[yi]) continue;
-            _surface.DrawBitmap(bmp, new D2DRect(dx[xi], dy[yi], dx[xi + 1], dy[yi + 1]), 1,
+            _surface.DrawBitmap(bmp, new D2DRect(dx[xi], dy[yi], dx[xi + 1], dy[yi + 1]), BgA,
                 new D2DRect(sx[xi], sy[yi], sx[xi + 1], sy[yi + 1]));
         }
     }
@@ -242,12 +246,13 @@ public sealed unsafe partial class DockWindow : WindowBase
         }
         // Built-in: dark smoked glass, lighter at the top, thin light rim (close to CrystalXP).
         var radius = 7 * _scale;
-        _surface.FillRoundRect(r, radius, new D2DColor(0.09f, 0.1f, 0.12f, 0.82f));
+        _surface.FillRoundRect(r, radius, Bg(new D2DColor(0.09f, 0.1f, 0.12f, 0.82f)));
         LayeredSurface.SetGradientLine(_shelfBrush, new D2DPoint(r.L, r.T), new D2DPoint(r.L, r.B));
+        LayeredSurface.SetBrushOpacity(_shelfBrush, BgA);
         _surface.FillRoundRect(r, radius, default, _shelfBrush, setColor: false);
-        _surface.DrawRoundRect(r, radius, new D2DColor(1, 1, 1, 0.45f), 1 * _scale);
+        _surface.DrawRoundRect(r, radius, Bg(new D2DColor(1, 1, 1, 0.45f)), 1 * _scale);
         var inner = new D2DRect(r.L + 1.5f * _scale, r.T + 1.5f * _scale, r.R - 1.5f * _scale, r.B - 1.5f * _scale);
-        _surface.DrawRoundRect(inner, radius - 1, new D2DColor(0, 0, 0, 0.35f), 1 * _scale);
+        _surface.DrawRoundRect(inner, radius - 1, Bg(new D2DColor(0, 0, 0, 0.35f)), 1 * _scale);
         return r;
     }
 
@@ -338,12 +343,13 @@ public sealed unsafe partial class DockWindow : WindowBase
         var shelfC = D2DColor.Parse(Opt.ShelfColor, 0x70182030);
         var shelf = ToWindow(rowStart - _pad * 2, rowEnd + _pad * 2, _shelfV0 - off, _shelfV0 + _shelfThick - off);
         var radius = 8 * _scale;
-        s.FillRoundRect(shelf, radius, shelfC);
+        s.FillRoundRect(shelf, radius, Bg(shelfC));
         var gradTop = Opt.Edge switch { DockEdge.Bottom => new D2DPoint(0, shelf.T), DockEdge.Top => new D2DPoint(0, shelf.B), DockEdge.Left => new D2DPoint(shelf.R, 0), _ => new D2DPoint(shelf.L, 0) };
         var gradBot = Opt.Edge switch { DockEdge.Bottom => new D2DPoint(0, shelf.B), DockEdge.Top => new D2DPoint(0, shelf.T), DockEdge.Left => new D2DPoint(shelf.L, 0), _ => new D2DPoint(shelf.R, 0) };
         LayeredSurface.SetGradientLine(_shelfBrush, gradTop, gradBot);
+        LayeredSurface.SetBrushOpacity(_shelfBrush, BgA);
         s.FillRoundRect(shelf, radius, default, _shelfBrush, setColor: false);
-        s.DrawRoundRect(shelf, radius, D2DColor.Parse(Opt.ShelfBorderColor, 0x90FFFFFF).WithAlpha(0.8f), 1 * _scale);
+        s.DrawRoundRect(shelf, radius, Bg(D2DColor.Parse(Opt.ShelfBorderColor, 0x90FFFFFF).WithAlpha(0.8f)), 1 * _scale);
         }
 
         var now = Environment.TickCount64;
@@ -359,9 +365,9 @@ public sealed unsafe partial class DockWindow : WindowBase
                 {
                     float sv0 = _shelfV0 + _outEdge * 0.4f - off, sv1 = _iconV0 + _base + _outAway * 0.6f - off;
                     if (_skinSep != 0 && _skin is { } k)
-                        s.DrawBitmap(_skinSep, ToWindow(_u0[i], _u0[i] + _len[i], sv0 + k.SepBottom * _scale, sv1 - k.SepTop * _scale), 1);
+                        s.DrawBitmap(_skinSep, ToWindow(_u0[i], _u0[i] + _len[i], sv0 + k.SepBottom * _scale, sv1 - k.SepTop * _scale), BgA);
                     else
-                        s.FillRect(ToWindow(mid - 0.5f * _scale, mid + 0.5f * _scale, sv0, sv1), new D2DColor(1, 1, 1, 0.3f));
+                        s.FillRect(ToWindow(mid - 0.5f * _scale, mid + 0.5f * _scale, sv0, sv1), Bg(new D2DColor(1, 1, 1, 0.3f)));
                     continue;
                 }
                 var a = ToWindow(mid - _scale, mid + _scale, _shelfV0 + _pad * 0.5f - off, _shelfV0 + _shelfThick - _pad * 0.5f - off);

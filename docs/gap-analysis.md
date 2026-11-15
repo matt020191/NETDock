@@ -29,7 +29,7 @@ Effort is rough: **S** = an hour or two, **M** = a session, **L** = several sess
 | 6 | ~~**Pop up on mouse-over + delay**~~ (done) | The dock comes over covering windows when the mouse reaches the edge. | S | Medium |
 | 7 | ~~**Auto-hide duration**~~ (done) | The slide speed is configurable. NETDock has only the delay. | S | Low |
 | 8 | ~~**Label font and styling**~~ (done) | Font, size, colour, outline colour and opacity, shadow colour and opacity. | M | Medium |
-| 9 | **Background opacity** | Skin/panel transparency slider, separate from icon opacity. | S | Medium |
+| 9 | ~~**Background opacity**~~ (done) | Skin/panel transparency slider, separate from icon opacity. | S | Medium |
 | 10 | **Icon attention effects** | A choice of click animation (bounce, zoom, pulse, ...). Also used when a minimised window flashes for attention. | M | Low |
 | 11 | **Icon state dropdown** | Icon Settings can pick the *full* Recycle Bin icon. The model has `IconFull` and import fills it, but the dialog can't edit it yet. | S | Medium |
 | 12 | **Special items** | *Add item → Dock Settings* and *Quit* icons. | S | Low |
