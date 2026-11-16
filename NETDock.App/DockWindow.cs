@@ -210,6 +210,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         Win32.SetTimer(Hwnd, PopTimer, 80, 0);
         RecycleBinService.Start(Hwnd);
         RegisterToggleHotkey();
+        RegisterSearchHotkey();
         Relayout();
         RefreshRunning();
         Win32.ShowWindow(Hwnd, Win32.SW_SHOWNOACTIVATE);
@@ -797,6 +798,7 @@ public sealed unsafe partial class DockWindow : WindowBase
                 StartEffect(item, Opt.ClickEffect);
                 if (string.Equals(item.Target, SpecialItems.Settings, StringComparison.OrdinalIgnoreCase)) SettingsWindow.Show(_app);
                 else if (string.Equals(item.Target, SpecialItems.Quit, StringComparison.OrdinalIgnoreCase)) Close();
+                else if (string.Equals(item.Target, SpecialItems.Search, StringComparison.OrdinalIgnoreCase)) _app.Search.Show();
                 return;
             case ItemKind.Stack:
                 if (item.Stack?.View == StackView.Open) Launcher.Open(_app.Tokens.Expand(item.Target)!);
@@ -1074,6 +1076,7 @@ public sealed unsafe partial class DockWindow : WindowBase
                 return 0;
             case 0x312: // WM_HOTKEY
                 if (w == HotkeyId) ToggleVisible();
+                else if (w == SearchHotkeyId) _app.Search.Toggle();
                 return 0;
             case RecycleBinService.WM_BIN_CHANGED:
                 Render();
@@ -1147,7 +1150,7 @@ public sealed unsafe partial class DockWindow : WindowBase
 
     // ---------------------------------------------------------------- show/hide hotkey
 
-    private const int HotkeyId = 1;
+    private const int HotkeyId = 1, SearchHotkeyId = 2;
     private bool _userHidden;
     public bool IsUserHidden => _userHidden;
 
@@ -1159,6 +1162,20 @@ public sealed unsafe partial class DockWindow : WindowBase
     private static partial bool UnregisterHotKey(nint h, int id);
 
     /// <summary>(Re)register the hotkey from settings. False if another program already owns it.</summary>
+    public bool RegisterSearchHotkey()
+    {
+        UnregisterHotKey(Hwnd, SearchHotkeyId);
+        if (Hotkey.Parse(Opt.SearchHotkey) is not { } k) return true;
+        return RegisterHotKey(Hwnd, SearchHotkeyId, k.Modifiers | 0x4000 /* MOD_NOREPEAT */, k.VirtualKey);
+    }
+
+    /// <summary>Click a dock item by id, as the search overlay does for "On the dock" results.</summary>
+    public void ActivateById(string id, bool elevate)
+    {
+        var index = Items.FindIndex(i => i.Id == id);
+        if (index >= 0) Activate(index, newInstance: false, elevate);
+    }
+
     public bool RegisterToggleHotkey()
     {
         UnregisterHotKey(Hwnd, HotkeyId);

@@ -139,6 +139,8 @@ public sealed class DockOptions
     public int ZoomDurationMs { get; set; } = 150;
     /// <summary>Global hotkey that hides or shows the whole dock (RocketDock: Ctrl+Alt+R). Blank = none.</summary>
     public string? ToggleHotkey { get; set; } = "Ctrl+Alt+R";
+    /// <summary>Global hotkey for the search overlay. Blank = none.</summary>
+    public string? SearchHotkey { get; set; } = "Alt+Space";
     public DockLayer Layer { get; set; } = DockLayer.AlwaysOnTop;
     /// <summary>When not always on top: resting the mouse on the screen edge brings the dock over other windows.</summary>
     public bool PopUp { get; set; } = true;

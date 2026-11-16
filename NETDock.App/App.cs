@@ -16,6 +16,7 @@ public sealed unsafe partial class App
     public DockWindow Dock { get; private set; } = null!;
     public StackFlyout Stack { get; private set; } = null!;
     public PreviewPopup Preview { get; private set; } = null!;
+    public SearchOverlay Search { get; private set; } = null!;
     public string ExeFolder { get; }
 
     private App()
@@ -76,6 +77,7 @@ public sealed unsafe partial class App
         Dock = new DockWindow(this);
         Stack = new StackFlyout(this);
         Preview = new PreviewPopup(this);
+        Search = new SearchOverlay(this);
         Dock.Show();
         AddTray();
         if (summary is not null) Win32.MessageBox(Dock.Hwnd, summary, "NETDock", Win32.MB_OK | Win32.MB_ICONINFORMATION);
@@ -87,6 +89,8 @@ public sealed unsafe partial class App
             // Tab / Enter / Esc navigation in the settings windows.
             if (SettingsWindow.Current is { } sw && Win32.IsDialogMessage(sw.Hwnd, &msg)) continue;
             if (IconSettingsDialog.Current is { } isd && Win32.IsDialogMessage(isd.Hwnd, &msg)) continue;
+            // Arrow keys, Enter and Esc in the search box drive the result list.
+            if (msg.message == Win32.WM_KEYDOWN && Search is { IsOpen: true } so && msg.hwnd == so.Edit && so.HandleKey(msg.wParam)) continue;
             Win32.TranslateMessage(&msg);
             Win32.DispatchMessage(&msg);
         }

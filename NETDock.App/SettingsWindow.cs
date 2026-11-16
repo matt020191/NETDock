@@ -147,6 +147,27 @@ public sealed unsafe class SettingsWindow : WindowBase
 
     // ------------------------------------------------------------ pages
 
+    /// <summary>"Title  [Ctrl+Alt+R]  ✓ Active": a global hotkey, registered as it's typed so conflicts show at once.</summary>
+    private void HotkeyRow(ref float y, string title, Func<string?> get, Action<string?> set, Func<bool> register)
+    {
+        _ui.Label(title, X, y + 4, 160);
+        var id = Id();
+        var edit = _ui.Edit(get() ?? "", X + 165, y, 170, id);
+        var status = _ui.Label("", X + 345, y + 4, 140);
+        void Validate()
+        {
+            var text = Layout.Text(edit);
+            set(text.Length == 0 ? null : text);
+            var ok = Hotkey.Parse(text) is not null || text.Length == 0;
+            var registered = ok && register();
+            Ui.SetWindowText(status, text.Length == 0 ? L.T("No hotkey") : !ok ? L.T("Not valid (e.g. Ctrl+Alt+R)") : registered ? L.T("✓ Active") : L.T("In use by another program"));
+        }
+        _onCommand[id] = code => { if (code == Ui.EN_CHANGE) Validate(); };
+        _refresh.Add(() => { Ui.SetWindowText(edit, get() ?? ""); Validate(); });
+        Validate();
+        y += 34;
+    }
+
     private void BuildGeneral()
     {
         _ui.Page = 0;
@@ -162,6 +183,8 @@ public sealed unsafe class SettingsWindow : WindowBase
         Combo(ref y, L.T("Language (menus and windows opened from now on)"), [.. langItems],
             () => _app.Settings.Language is { } cur ? Math.Max(0, languages.FindIndex(n => n.Equals(cur, StringComparison.OrdinalIgnoreCase)) + 1) : 0,
             v => { _app.Settings.Language = v == 0 ? null : languages[v - 1]; _app.LoadLanguage(); });
+        HotkeyRow(ref y, L.T("Show/hide the dock"), () => Opt.ToggleHotkey, v => Opt.ToggleHotkey = v, () => _app.Dock.RegisterToggleHotkey());
+        HotkeyRow(ref y, L.T("Search apps and files"), () => Opt.SearchHotkey, v => Opt.SearchHotkey = v, () => _app.Dock.RegisterSearchHotkey());
 
         y += 16;
         _ui.Group(L.T("Settings storage"), X - 6, y, Wide + 6, 200);
@@ -299,24 +322,7 @@ public sealed unsafe class SettingsWindow : WindowBase
         Slider(ref y, L.T("Auto-hide duration"), 0, 1500, () => Opt.AutoHideDurationMs, v => Opt.AutoHideDurationMs = v, v => v == 0 ? L.T("Instant") : $"{v}ms");
         Combo(ref y, L.T("Clicking a program that is already running"), [L.T("Switches to it (click again to minimise)"), L.T("Starts another copy")],
             () => Opt.ActivateIfRunning ? 0 : 1, v => Opt.ActivateIfRunning = v == 0);
-        _ui.Label(L.T("Shift+click or middle-click always starts another copy; Ctrl+Shift+click runs as administrator."), X, y, Wide, 40);
-        y += 50;
-        _ui.Label(L.T("Show/hide hotkey"), X, y, Wide);
-        var id = Id();
-        var edit = _ui.Edit(Opt.ToggleHotkey ?? "", X + 70, y + 22, 180, id);
-        var status = _ui.Label("", X + 260, y + 25, 220);
-        void Validate()
-        {
-            var text = Layout.Text(edit);
-            Opt.ToggleHotkey = text.Length == 0 ? null : text;
-            var ok = Hotkey.Parse(text) is not null || text.Length == 0;
-            var registered = ok && _app.Dock.RegisterToggleHotkey();
-            Ui.SetWindowText(status, text.Length == 0 ? L.T("No hotkey") : !ok ? L.T("Not a valid key, e.g. Ctrl+Alt+R") : registered ? L.T("\u2713 Active") : L.T("In use by another program"));
-        }
-        _onCommand[id] = code => { if (code == Ui.EN_CHANGE) Validate(); };
-        _refresh.Add(() => { Ui.SetWindowText(edit, Opt.ToggleHotkey ?? ""); Validate(); });
-        Validate();
-        _ui.Label(L.T("Hides the whole dock until pressed again. Ctrl-drag moves or removes icons even when they are locked."), X, y + 56, Wide, 40);
+        _ui.Label(L.T("Shift+click or middle-click always starts another copy; Ctrl+Shift+click runs as administrator. Ctrl-drag moves or removes icons even when they are locked."), X, y, Wide, 40);
     }
 
     private void BuildAbout()
@@ -350,6 +356,7 @@ public sealed unsafe class SettingsWindow : WindowBase
             _app.Settings.Sanitize();
             _app.Dock.Relayout();
             _app.Dock.RegisterToggleHotkey();
+            _app.Dock.RegisterSearchHotkey();
         }
         Win32.DestroyWindow(Hwnd);
         foreach (var b in _swatchBrushes.Values) Win32.DeleteObject(b);

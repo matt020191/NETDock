@@ -418,3 +418,42 @@ public class RunningKeyTests
         Assert.Empty(RunningKeys.ForItem(@"C:\x\notes.txt", null));
     }
 }
+
+public class SearchTests
+{
+    private static readonly SearchEntry[] Entries =
+    [
+        new("Visual Studio Code", "code", SearchKind.App),
+        new("Visual Studio 2026", "vs", SearchKind.App),
+        new("Calculator", "calc", SearchKind.App),
+        new("Notepad", "np", SearchKind.App),
+        new("OneNote", "on", SearchKind.App),
+        new("notes.txt", "n.txt", SearchKind.Recent),
+        new("Firefox", "ff", SearchKind.Dock),
+    ];
+
+    private static string Top(string q) => SearchRanker.Rank(q, Entries)[0].Name;
+
+    [Fact]
+    public void Prefix_beats_substring_and_dock_wins_ties()
+    {
+        Assert.Equal("Calculator", Top("calc"));
+        Assert.Equal("Notepad", Top("note"));
+        Assert.Equal("Firefox", Top("fire"));
+    }
+
+    [Fact]
+    public void Initials_words_and_camel_case_match()
+    {
+        Assert.Equal("Visual Studio Code", Top("vsc"));
+        Assert.Equal("Visual Studio 2026", Top("studio 20"));
+        Assert.Contains(SearchRanker.Rank("note", Entries), e => e.Name == "OneNote");
+    }
+
+    [Fact]
+    public void Letters_in_order_match_and_others_dont()
+    {
+        Assert.Equal("Calculator", Top("clcltr"));
+        Assert.Empty(SearchRanker.Rank("zzz", Entries));
+    }
+}

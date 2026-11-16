@@ -98,6 +98,7 @@ public static unsafe class Menus
         Sep(add);
         Add(add, 43, L.T("Dock Settings icon"));
         Add(add, 44, L.T("Quit icon"));
+        Add(add, 45, L.T("Search icon"));
 
         var edge = Sub(L.T("Position"));
         Add(edge, 50, L.T("Bottom"), o.Edge == DockEdge.Bottom);
@@ -163,6 +164,7 @@ public static unsafe class Menus
             app.Store.Location.IsPortable, !app.Store.Location.IsPortable);
 
         Sep(m);
+        Add(m, 96, Hotkey.Parse(o.SearchHotkey) is null ? L.T("Search...") : L.T("Search...") + "\t" + o.SearchHotkey);
         Add(m, 97, Hotkey.Parse(o.ToggleHotkey) is null ? L.T("Hide dock") : L.T("Hide dock") + "\t" + o.ToggleHotkey);
         Add(m, 99, L.T("Exit NETDock"));
 
@@ -243,6 +245,7 @@ public static unsafe class Menus
             case 13 when item is not null:
                 IconSettingsDialog.Show(app, item);
                 return;
+            case 96: app.Search.Show(); return;
             case 97: dock.ToggleVisible(); return;
             case 98:
                 SettingsWindow.Show(app);
@@ -261,6 +264,7 @@ public static unsafe class Menus
             case 16 when item is not null: app.Settings.Items.Remove(item); break;
             case 17: RecycleBinService.Empty(dock.Hwnd); return;
             case 43: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Settings)); break;
+            case 45: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Search)); break;
             case 44: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Quit)); break;
             case 40: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), new DockItem { Kind = ItemKind.Separator }); break;
             case 41:
