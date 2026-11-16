@@ -128,7 +128,7 @@ $api = "https://api.github.com/repos/$GitHubRepo"
 $sha = git rev-parse HEAD
 
 if (-not $Notes) {
-    $prev = git describe --tags --abbrev=0 2>$null
+    $prev = git tag --list 'v*' --sort=-v:refname | Select-Object -First 1  # (git describe errors when there's no tag yet)
     $range = if ($prev) { "$prev..HEAD" } else { 'HEAD' }
     $Notes = (git log $range --no-merges --format='- %s') -join "`n"
 }
