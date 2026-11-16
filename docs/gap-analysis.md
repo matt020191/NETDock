@@ -48,7 +48,7 @@ Effort is rough: **S** = an hour or two, **M** = a session, **L** = several sess
 | D | ~~**Search overlay**~~ (done: Ctrl+Alt+Space; dock items, all Start/Store apps, recent files) | A key opens a search over installed apps and recent files. | M |
 | E | ~~**Per-app volume**~~ (done: scroll an icon in 5 % steps; Mute in its right-click menu, since middle-click starts another copy) | Scroll an icon to change that app's volume, middle-click to mute. | M |
 | F | ~~**System corner**~~ (done: Add > System corner; live clock, battery, network, volume tiles) | Clock, battery, network, volume tiles. | M |
-| G | **Modes** | Switchable sets of pinned apps and window layouts. | L |
+| G | ~~**Modes**~~ (done: right-click > Mode; each mode has its own icons and an optional saved window layout; `--mode N` / `--mode next` from a shortcut) | Switchable sets of pinned apps and window layouts. | L |
 | H | Wallpaper accent sync, ambient effects, desktop widgets | Mostly visual polish. | L |
 
 ## NETDock's own rough edges

@@ -96,6 +96,21 @@ public static unsafe class Menus
             Sep(m);
         }
 
+        // Modes: switchable icon sets, each with an optional window layout.
+        var modes = Sub(L.T("Mode"));
+        var active = app.Settings.Modes.Count == 0 ? null : ModeSwitcher.Active(app.Settings);
+        if (active is null) Add(modes, 300, ModeSwitcher.DefaultName, true);
+        else for (var i = 0; i < app.Settings.Modes.Count && i < 20; i++)
+            Add(modes, (uint)(300 + i), app.Settings.Modes[i].Name, app.Settings.Modes[i] == active);
+        Sep(modes);
+        Add(modes, 320, L.T("New mode (copy of these icons)..."));
+        Add(modes, 321, L.T("Rename this mode..."));
+        Add(modes, 324, L.T("Delete this mode"), enabled: app.Settings.Modes.Count > 1);
+        Sep(modes);
+        Add(modes, 322, L.T("Save window layout for this mode"));
+        Add(modes, 323, L.T("Restore window layout"), enabled: active?.Windows.Count > 0);
+        Add(modes, 325, L.T("Forget window layout"), enabled: active?.Windows.Count > 0);
+
         var add = Sub(L.T("Add"));
         Add(add, 42, L.T("File or program..."));
         Add(add, 41, L.T("Folder stack..."));
@@ -106,10 +121,10 @@ public static unsafe class Menus
         Add(add, 45, L.T("Search icon"));
         Sep(add);
         Add(add, 46, L.T("System corner (clock, battery, network, volume)"));
-        Add(add, 47, L.T("Clock"));
-        Add(add, 48, L.T("Battery"));
-        Add(add, 49, L.T("Network"));
-        Add(add, 50, L.T("Volume"));
+        Add(add, 64, L.T("Clock"));
+        Add(add, 65, L.T("Battery"));
+        Add(add, 66, L.T("Network"));
+        Add(add, 67, L.T("Volume"));
 
         var edge = Sub(L.T("Position"));
         Add(edge, 50, L.T("Bottom"), o.Edge == DockEdge.Bottom);
@@ -276,13 +291,43 @@ public static unsafe class Menus
             case 17: RecycleBinService.Empty(dock.Hwnd); return;
             case 18 when item is not null: dock.ToggleMute(item); return;
             case 43: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Settings)); break;
+            case >= 300 and < 320 when cmd - 300 < app.Settings.Modes.Count:
+                app.SwitchMode(app.Settings.Modes[(int)cmd - 300].Name);
+                return;
+            case 320:
+                if (PromptDialog.Ask(L.T("New mode"), L.T("Name of the new mode (it starts with the current icons):"),
+                        ModeSwitcher.UniqueName(app.Settings, L.T("Mode"))) is not { } newName) return;
+                ModeSwitcher.Create(app.Settings, newName);
+                app.AfterModeChange(restoreLayout: false);
+                return;
+            case 321:
+                if (PromptDialog.Ask(L.T("Rename mode"), L.T("New name for this mode:"), ModeSwitcher.Active(app.Settings).Name) is not { } rename) return;
+                ModeSwitcher.Rename(app.Settings, rename);
+                app.Save();
+                return;
+            case 324:
+                if (Win32.MessageBox(dock.Hwnd, L.F("Delete the mode \"{0}\" and its icons?", ModeSwitcher.Active(app.Settings).Name), "NETDock",
+                        Win32.MB_YESNO | Win32.MB_ICONQUESTION) != Win32.IDYES || !ModeSwitcher.DeleteActive(app.Settings)) return;
+                app.AfterModeChange(restoreLayout: true);
+                return;
+            case 322:
+            {
+                var m = ModeSwitcher.Active(app.Settings);
+                m.Windows = WindowLayouts.Capture(dock.Hwnd);
+                app.Save();
+                Win32.MessageBox(dock.Hwnd, L.F("Saved the position of {0} windows. They go back there whenever you switch to \"{1}\".", m.Windows.Count, m.Name),
+                    "NETDock", Win32.MB_OK | Win32.MB_ICONINFORMATION);
+                return;
+            }
+            case 323: WindowLayouts.Restore(ModeSwitcher.Active(app.Settings).Windows, dock.Hwnd); return;
+            case 325: ModeSwitcher.Active(app.Settings).Windows.Clear(); app.Save(); return;
             case 46:
                 // Aero Dock's system corner: after a separator at the end of the dock.
                 app.Settings.Items.Add(new DockItem { Kind = ItemKind.Separator });
                 foreach (var t in SpecialItems.SystemCorner) app.Settings.Items.Add(SpecialItems.Create(t));
                 break;
-            case >= 47 and <= 50:
-                app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.SystemCorner[cmd - 47]));
+            case >= 64 and <= 67:
+                app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.SystemCorner[cmd - 64]));
                 break;
             case 45: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Search)); break;
             case 44: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Quit)); break;

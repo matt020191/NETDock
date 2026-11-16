@@ -470,4 +470,72 @@ public class VolumeStepTests
     [InlineData(0.50f, 3, 0.65f)]
     public void Steps_snap_to_five_percent(float from, int notches, float to) =>
         Assert.Equal(to, VolumeSteps.Step(from, notches), 3);
+
+    private static DockSettings TwoIcons() => new() { Items = [new DockItem { Name = "A", Target = "a.exe" }, new DockItem { Name = "B", Target = "b.exe" }] };
+
+    [Fact]
+    public void New_mode_copies_icons_and_switching_swaps_them()
+    {
+        var s = TwoIcons();
+        var original = s.Items;
+        ModeSwitcher.Create(s, "Work");
+        Assert.Equal("Work", s.ActiveMode);
+        Assert.Equal(["Default", "Work"], s.Modes.Select(m => m.Name));
+        Assert.Equal(["A", "B"], s.Items.Select(i => i.Name));
+        Assert.DoesNotContain(s.Items, i => original.Any(o => o.Id == i.Id)); // fresh ids, independent copies
+        s.Items.RemoveAt(0);
+        Assert.True(ModeSwitcher.Switch(s, "default"));
+        Assert.Equal("Default", s.ActiveMode);
+        Assert.Same(original, s.Items);
+        Assert.True(ModeSwitcher.Switch(s, "Work"));
+        Assert.Equal(["B"], s.Items.Select(i => i.Name));
+        Assert.False(ModeSwitcher.Switch(s, "Work"));
+        Assert.False(ModeSwitcher.Switch(s, "Nope"));
+    }
+
+    [Fact]
+    public void Mode_names_stay_unique_and_delete_keeps_one()
+    {
+        var s = TwoIcons();
+        ModeSwitcher.Create(s, "Work");
+        ModeSwitcher.Create(s, "work");
+        Assert.Equal("work 2", s.ActiveMode);
+        ModeSwitcher.Rename(s, "Default");
+        Assert.Equal("Default 2", s.ActiveMode);
+        Assert.True(ModeSwitcher.DeleteActive(s));
+        Assert.True(ModeSwitcher.DeleteActive(s));
+        Assert.False(ModeSwitcher.DeleteActive(s));
+        Assert.Single(s.Modes);
+        Assert.Equal(s.Modes[0].Name, s.ActiveMode);
+    }
+
+    [Fact]
+    public void Modes_survive_a_save_round_trip()
+    {
+        var s = TwoIcons();
+        ModeSwitcher.Create(s, "Work");
+        ModeSwitcher.Active(s).Windows.Add(new WindowLayout { Key = "c:\a.exe", Left = 1, Top = 2, Right = 3, Bottom = 4, Maximized = true });
+        var json = System.Text.Json.JsonSerializer.Serialize(s, SettingsJson.Default.DockSettings);
+        var back = System.Text.Json.JsonSerializer.Deserialize(json, SettingsJson.Default.DockSettings)!.Sanitize();
+        Assert.Equal("Work", back.ActiveMode);
+        Assert.Equal(2, back.Modes[0].Items.Count);
+        Assert.True(back.Modes[1].Windows[0].Maximized);
+    }
+
+    [Fact]
+    public void Window_layouts_match_by_title_then_order()
+    {
+        var saved = new[]
+        {
+            new WindowLayout { Key = "x", Title = "Doc 2", Index = 0, Left = 20 },
+            new WindowLayout { Key = "x", Title = "gone", Index = 1, Left = 10 },
+            new WindowLayout { Key = "y", Title = "y", Left = 30 },
+        };
+        var live = new Dictionary<string, List<(int, string)>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["X"] = [(1, "Doc 1"), (2, "Doc 2")],
+        };
+        var pairs = ModeSwitcher.Match(saved, live);
+        Assert.Equal([(20, 2), (10, 1)], pairs.Select(p => (p.Layout.Left, p.Window)));
+    }
 }

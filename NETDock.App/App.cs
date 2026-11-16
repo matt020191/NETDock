@@ -180,6 +180,12 @@ public sealed unsafe partial class App
         for (var i = 1; i < args.Length; i++)
         {
             if (args[i].Equals("--settings", StringComparison.OrdinalIgnoreCase)) return -1;
+            // --mode N (1-based) or --mode next: shortcuts and hotkey tools can switch modes.
+            if (args[i].Equals("--mode", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                if (args[i + 1].Equals("next", StringComparison.OrdinalIgnoreCase)) return -99;
+                if (int.TryParse(args[i + 1], out var m) && m is >= 1 and <= 99) return -100 - m;
+            }
             if (args[i].Equals("--icon-settings", StringComparison.OrdinalIgnoreCase)
                 && i + 1 < args.Length && int.TryParse(args[i + 1], out var n) && n >= 0) return n;
         }
@@ -194,7 +200,27 @@ public sealed unsafe partial class App
     public void RunCommandLine(nint cmd)
     {
         if (cmd == -1) SettingsWindow.Show(this);
+        else if (cmd == -99 && Settings.Modes.Count > 1)
+        {
+            var i = Settings.Modes.IndexOf(ModeSwitcher.Active(Settings));
+            SwitchMode(Settings.Modes[(i + 1) % Settings.Modes.Count].Name);
+        }
+        else if (cmd <= -101 && -cmd - 101 < Settings.Modes.Count) SwitchMode(Settings.Modes[(int)(-cmd - 101)].Name);
         else if (cmd >= 0 && cmd < Settings.Items.Count) IconSettingsDialog.Show(this, Settings.Items[(int)cmd]);
+    }
+
+    public void SwitchMode(string name)
+    {
+        if (ModeSwitcher.Switch(Settings, name)) AfterModeChange(restoreLayout: true);
+    }
+
+    /// <summary>Save, redraw the dock with the new icons, and (on a switch) move windows to the mode's layout.</summary>
+    public void AfterModeChange(bool restoreLayout)
+    {
+        Save();
+        Dock.Relayout();
+        if (restoreLayout && ModeSwitcher.Find(Settings, Settings.ActiveMode) is { Windows.Count: > 0 } m)
+            WindowLayouts.Restore(m.Windows, Dock.Hwnd);
     }
 
     // ---------------------------------------------------------------- tray

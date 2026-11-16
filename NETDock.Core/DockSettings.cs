@@ -186,6 +186,9 @@ public sealed class DockSettings
     public string? Language { get; set; }
     /// <summary>Extra folders shown in Icon Settings' library (tokenized paths).</summary>
     public List<string> IconFolders { get; set; } = [];
+    /// <summary>Switchable icon sets (empty until the first mode is created).</summary>
+    public List<DockMode> Modes { get; set; } = [];
+    public string? ActiveMode { get; set; }
 
     /// <summary>Clamp every number into a range the renderer can draw, so a hand-edited file can't break it.</summary>
     public DockSettings Sanitize()
@@ -216,6 +219,10 @@ public sealed class DockSettings
         if (!SettingsStore.IsDataReference(d.Skin, "skins/")) d.Skin = null;
         Items ??= [];
         Items.RemoveAll(i => i is null);
+        Modes ??= [];
+        Modes.RemoveAll(m => m is null || string.IsNullOrWhiteSpace(m.Name));
+        foreach (var m in Modes) { m.Items ??= []; m.Items.RemoveAll(i => i is null); m.Windows ??= []; m.Windows.RemoveAll(w => w is null || w.Key is null); }
+        if (Modes.Count == 0) ActiveMode = null; // otherwise ModeSwitcher.Active adds a missing active entry
         foreach (var i in Items)
         {
             if (string.IsNullOrEmpty(i.Id)) i.Id = Guid.NewGuid().ToString("n");
