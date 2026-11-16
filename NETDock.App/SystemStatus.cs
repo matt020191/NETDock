@@ -102,9 +102,18 @@ public static unsafe partial class SystemStatus
     private static readonly Guid IID_IMMDeviceEnumerator = new("A95664D2-9614-4F35-A746-DE8DB63617E6");
     private static readonly Guid IID_IAudioEndpointVolume = new("5CDF2C82-841E-4546-9722-0CF74078229A");
 
-    /// <summary>The default output's volume control, or 0. Caller releases.</summary>
+    // The volume control is kept between the once-a-second reads (creating the enumerator, device and endpoint
+    // each time is three COM activations a second). It is re-fetched every 10 s, or at once if a call fails, so a
+    // change of default output device is picked up.
+    private static nint _endpoint;
+    private static long _endpointAt;
+
+    /// <summary>The default output's volume control (owned by the cache: don't release), or 0.</summary>
     private static nint Endpoint()
     {
+        var now = Environment.TickCount64;
+        if (_endpoint != 0 && now - _endpointAt < 10_000) return _endpoint;
+        DropEndpoint();
         nint en = 0, dev = 0, vol = 0;
         try
         {
@@ -114,8 +123,8 @@ public static unsafe partial class SystemStatus
             if (((delegate* unmanaged<nint, int, int, nint*, int>)Com.Vt(en)[4])(en, 0, 1, &dev) < 0) return 0; // GetDefaultAudioEndpoint
             var v = IID_IAudioEndpointVolume;
             if (((delegate* unmanaged<nint, Guid*, uint, nint, nint*, int>)Com.Vt(dev)[3])(dev, &v, 1, 0, &vol) < 0) return 0; // Activate
-            var r = vol; vol = 0;
-            return r;
+            (_endpoint, _endpointAt, vol) = (vol, now, 0);
+            return _endpoint;
         }
         finally
         {
@@ -125,30 +134,29 @@ public static unsafe partial class SystemStatus
         }
     }
 
+    private static void DropEndpoint()
+    {
+        if (_endpoint != 0) Com.Release(ref _endpoint);
+        _endpoint = 0;
+    }
+
     private static void ReadVolume()
     {
         var ep = Endpoint();
         if (ep == 0) return;
-        try
-        {
-            float v; int m;
-            if (((delegate* unmanaged<nint, float*, int>)Com.Vt(ep)[9])(ep, &v) >= 0) MasterVolume = v;   // GetMasterVolumeLevelScalar
-            if (((delegate* unmanaged<nint, int*, int>)Com.Vt(ep)[15])(ep, &m) >= 0) MasterMuted = m != 0; // GetMute
-        }
-        finally { Com.Release(ref ep); }
+        float v; int m;
+        if (((delegate* unmanaged<nint, float*, int>)Com.Vt(ep)[9])(ep, &v) >= 0) MasterVolume = v;   // GetMasterVolumeLevelScalar
+        else { DropEndpoint(); return; } // device gone (unplugged): fetch the new default next time
+        if (((delegate* unmanaged<nint, int*, int>)Com.Vt(ep)[15])(ep, &m) >= 0) MasterMuted = m != 0; // GetMute
     }
 
     public static void SetMasterVolume(float level)
     {
         var ep = Endpoint();
         if (ep == 0) return;
-        try
-        {
-            var g = Guid.Empty;
-            if (level > 0 && MasterMuted) ((delegate* unmanaged<nint, int, Guid*, int>)Com.Vt(ep)[14])(ep, 0, &g);
-            ((delegate* unmanaged<nint, float, Guid*, int>)Com.Vt(ep)[7])(ep, Math.Clamp(level, 0f, 1f), &g); // SetMasterVolumeLevelScalar
-        }
-        finally { Com.Release(ref ep); }
+        var g = Guid.Empty;
+        if (level > 0 && MasterMuted) ((delegate* unmanaged<nint, int, Guid*, int>)Com.Vt(ep)[14])(ep, 0, &g);
+        if (((delegate* unmanaged<nint, float, Guid*, int>)Com.Vt(ep)[7])(ep, Math.Clamp(level, 0f, 1f), &g) < 0) DropEndpoint(); // SetMasterVolumeLevelScalar
         ReadVolume();
     }
 
@@ -156,12 +164,8 @@ public static unsafe partial class SystemStatus
     {
         var ep = Endpoint();
         if (ep == 0) return;
-        try
-        {
-            var g = Guid.Empty;
-            ((delegate* unmanaged<nint, int, Guid*, int>)Com.Vt(ep)[14])(ep, MasterMuted ? 0 : 1, &g); // SetMute
-        }
-        finally { Com.Release(ref ep); }
+        var g = Guid.Empty;
+        if (((delegate* unmanaged<nint, int, Guid*, int>)Com.Vt(ep)[14])(ep, MasterMuted ? 0 : 1, &g) < 0) DropEndpoint(); // SetMute
         ReadVolume();
     }
 

@@ -42,8 +42,18 @@ public static unsafe class Menus
             Win32.AppendMenu(m, Win32.MF_POPUP, (nuint)s, text);
             return s;
         }
-        void Add(nint menu, uint id, string text, bool check = false, bool enabled = true) =>
+        // Command ids are plain numbers shared by every submenu; two items with one id would both run the first
+        // matching case (the F volume tile once shadowed Position > Bottom). Catch that the moment the menu is built.
+        var used = new HashSet<uint>();
+        void Add(nint menu, uint id, string text, bool check = false, bool enabled = true)
+        {
+            if (!used.Add(id))
+            {
+                System.Diagnostics.Debug.Fail($"Menu id {id} used twice ('{text}')");
+                App.Log(new InvalidOperationException($"Menu id {id} used twice ('{text}')"));
+            }
             Win32.AppendMenu(menu, (check ? Win32.MF_CHECKED : 0) | (enabled ? 0 : Win32.MF_GRAYED), id, text);
+        }
         void Sep(nint menu) => Win32.AppendMenu(menu, Win32.MF_SEPARATOR, 0, null);
 
         if (Updater.Available is { } upd) { Add(m, 330, L.F("Update to NETDock {0}...", upd.Version)); Sep(m); }
@@ -99,7 +109,7 @@ public static unsafe class Menus
 
         // Modes: switchable icon sets, each with an optional window layout.
         var modes = Sub(L.T("Mode"));
-        var active = app.Settings.Modes.Count == 0 ? null : ModeSwitcher.Active(app.Settings);
+        var active = ModeSwitcher.Find(app.Settings, app.Settings.ActiveMode); // read-only: Sanitize repairs a dangling one
         if (active is null) Add(modes, 300, ModeSwitcher.DefaultName, true);
         else for (var i = 0; i < app.Settings.Modes.Count && i < 20; i++)
             Add(modes, (uint)(300 + i), app.Settings.Modes[i].Name, app.Settings.Modes[i] == active);
@@ -300,13 +310,13 @@ public static unsafe class Menus
                 app.SwitchMode(app.Settings.Modes[(int)cmd - 300].Name);
                 return;
             case 320:
-                if (PromptDialog.Ask(L.T("New mode"), L.T("Name of the new mode (it starts with the current icons):"),
+                if (PromptDialog.Ask(dock.Hwnd, L.T("New mode"), L.T("Name of the new mode (it starts with the current icons):"),
                         ModeSwitcher.UniqueName(app.Settings, L.T("Mode"))) is not { } newName) return;
                 ModeSwitcher.Create(app.Settings, newName);
                 app.AfterModeChange(restoreLayout: false);
                 return;
             case 321:
-                if (PromptDialog.Ask(L.T("Rename mode"), L.T("New name for this mode:"), ModeSwitcher.Active(app.Settings).Name) is not { } rename) return;
+                if (PromptDialog.Ask(dock.Hwnd, L.T("Rename mode"), L.T("New name for this mode:"), ModeSwitcher.Active(app.Settings).Name) is not { } rename) return;
                 ModeSwitcher.Rename(app.Settings, rename);
                 app.Save();
                 return;

@@ -62,11 +62,18 @@ public sealed record Skin(
     private static bool IsBareName(string name) =>
         name.Length > 0 && name is not ("." or "..") && name.IndexOfAny(['/', '\\', ':']) < 0;
 
-    /// <summary>Width and height from a PNG header, or null if it isn't a PNG.</summary>
+    /// <summary>Largest skin image side accepted; real skins are a few hundred pixels.</summary>
+    public const int MaxImageSide = 4096;
+
+    /// <summary>
+    /// Width and height from a PNG header, or null if it isn't a PNG or claims an unreasonable size
+    /// (the header is untrusted: a crafted file could ask for a multi-gigapixel decode or a negative size).
+    /// </summary>
     public static (int W, int H)? PngSize(ReadOnlySpan<byte> head)
     {
         if (head.Length < 24 || head[0] != 0x89 || head[1] != (byte)'P') return null;
         static int Be(ReadOnlySpan<byte> b) => b[0] << 24 | b[1] << 16 | b[2] << 8 | b[3];
-        return (Be(head[16..20]), Be(head[20..24]));
+        var (w, h) = (Be(head[16..20]), Be(head[20..24]));
+        return w is >= 1 and <= MaxImageSide && h is >= 1 and <= MaxImageSide ? (w, h) : null;
     }
 }

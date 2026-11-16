@@ -1143,9 +1143,16 @@ public sealed unsafe partial class DockWindow : WindowBase
         var (u, v) = ToEdge(pt.X, pt.Y);
         var count = Win32.DragQueryFile(hdrop, 0xFFFFFFFF, null, 0);
         var paths = new List<string>();
-        var buf = stackalloc char[2048];
         for (uint i = 0; i < count; i++)
-            paths.Add(new string(buf, 0, (int)Win32.DragQueryFile(hdrop, i, buf, 2048)));
+        {
+            // Ask for the length first: a fixed buffer would silently truncate long paths, and a truncated
+            // path handed to the Recycle Bin or a copy could name a different file or folder.
+            var len = Win32.DragQueryFile(hdrop, i, null, 0);
+            if (len == 0) continue;
+            var buf = new char[len + 1];
+            fixed (char* b = buf)
+                if (Win32.DragQueryFile(hdrop, i, b, len + 1) == len) paths.Add(new string(b, 0, (int)len));
+        }
         Win32.DragFinish(hdrop);
         if (paths.Count == 0) return;
 
@@ -1339,8 +1346,10 @@ public sealed unsafe partial class DockWindow : WindowBase
                 return 0;
         }
         if (msg == App.WM_TRAY) { _app.OnTray(this, (uint)l); return 0; }
+        if (msg == App.WM_TASKBARCREATED && msg != 0) { _app.OnTaskbarCreated(); return 0; }
+        if (msg == Updater.WM_UPDATE_APPLIED) { _app.OnUpdateApplied(w == 1); return 0; }
         if (msg == App.WM_COMMAND_LINE) { _app.RunCommandLine(w); return 0; }
-        if (msg == Updater.WM_UPDATE_FOUND) { _app.OnUpdateChecked((int)w); return 0; }
+        if (msg == Updater.WM_UPDATE_FOUND) { _app.OnUpdateChecked((int)w, l == 1); return 0; }
         return Default(msg, w, l);
     }
 

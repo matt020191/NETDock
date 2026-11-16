@@ -332,7 +332,7 @@ public sealed unsafe class SettingsWindow : WindowBase
     private void BuildAbout()
     {
         _ui.Page = 6;
-        var version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "";
+        var version = AppVersion.Text;
         float y = 60;
         // The logo, drawn from the exe's own icon resource (WM_DRAWITEM, IdLogo).
         _ui.Add("STATIC", null, Ui.SS_OWNERDRAW, X, y, 96, 96, IdLogo);

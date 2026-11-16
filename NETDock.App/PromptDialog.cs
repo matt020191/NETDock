@@ -7,14 +7,25 @@ namespace NETDock.App;
 public sealed unsafe class PromptDialog : WindowBase
 {
     private const int IdText = 100, IdOk = 1, IdCancel = 2;
-    private nint _edit, _font;
+    private nint _edit, _font, _owner;
+
+    /// <summary>True while a prompt is up: the dock ignores commands that would change what it's asking about.</summary>
+    public static bool IsOpen { get; private set; }
     private bool _done;
     private string? _result;
 
-    public static string? Ask(string title, string prompt, string initial)
+    /// <param name="owner">Disabled while the prompt is open (modal), so it can't start another command meanwhile.</param>
+    public static string? Ask(nint owner, string title, string prompt, string initial)
     {
-        var d = new PromptDialog();
-        return d.Run(title, prompt, initial);
+        if (IsOpen) return null;
+        IsOpen = true;
+        if (owner != 0) Win32.EnableWindow(owner, false);
+        try { return new PromptDialog { _owner = owner }.Run(title, prompt, initial); }
+        finally
+        {
+            if (owner != 0) Win32.EnableWindow(owner, true);
+            IsOpen = false;
+        }
     }
 
     private string? Run(string title, string prompt, string initial)
@@ -25,7 +36,7 @@ public sealed unsafe class PromptDialog : WindowBase
         var scale = mon.Dpi / 96f;
         int w = (int)(380 * scale), h = (int)(160 * scale);
         Create("NETDock.Prompt", Win32.WS_EX_DLGMODALFRAME, Win32.WS_POPUP | Win32.WS_CAPTION | Win32.WS_SYSMENU,
-            mon.Work.Left + (mon.Work.Width - w) / 2, mon.Work.Top + (mon.Work.Height - h) / 2, w, h, title);
+            mon.Work.Left + (mon.Work.Width - w) / 2, mon.Work.Top + (mon.Work.Height - h) / 2, w, h, title, owner: _owner);
         _font = Ui.CreateFont(-(int)(12 * scale), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
         var ui = new Layout(Hwnd, scale, _font);
         ui.Label(prompt, 12, 12, 340);

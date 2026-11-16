@@ -56,7 +56,6 @@ public sealed unsafe class StackFlyout : WindowBase
         if (_item is null) return;
         _item = null;
         Win32.ShowWindow(Hwnd, Win32.SW_HIDE);
-        _app.OnStackClosed();
     }
 
     private void Load()

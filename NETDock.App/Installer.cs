@@ -19,8 +19,6 @@ public static unsafe class Installer
     private static string ShortcutPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "NETDock.lnk");
     private static string UserSettingsFolder => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "NETDock");
 
-    public static string Version => typeof(Installer).Assembly.GetName().Version is { } v ? $"{v.Major}.{v.Minor}.{v.Build}" : "0.0.0";
-
     /// <summary>This copy is the installed one.</summary>
     public static bool IsInstalled(string exeFolder) =>
         string.Equals(Path.GetFullPath(exeFolder).TrimEnd('\\'), InstallFolder, StringComparison.OrdinalIgnoreCase);
@@ -47,7 +45,7 @@ public static unsafe class Installer
             var source = Environment.ProcessPath!;
             Directory.CreateDirectory(InstallFolder);
             // An older installed copy may be running: ask it to close, then replace it.
-            CloseOtherInstances();
+            CloseInstalledCopy();
             CopyFileReplacing(source, InstalledExe);
             var langs = Path.Combine(app.ExeFolder, "languages");
             if (Directory.Exists(langs))
@@ -83,7 +81,7 @@ public static unsafe class Installer
     {
         using var k = Registry.CurrentUser.CreateSubKey(UninstallKey);
         k.SetValue("DisplayName", "NETDock");
-        k.SetValue("DisplayVersion", Version);
+        k.SetValue("DisplayVersion", AppVersion.Text);
         k.SetValue("Publisher", Publisher);
         k.SetValue("DisplayIcon", InstalledExe + ",0");
         k.SetValue("InstallLocation", InstallFolder);
@@ -99,7 +97,7 @@ public static unsafe class Installer
     public static void Uninstall()
     {
         if (Win32.MessageBox(0, L.T("Uninstall NETDock?"), "NETDock", Win32.MB_YESNO | Win32.MB_ICONQUESTION) != Win32.IDYES) return;
-        CloseOtherInstances();
+        CloseInstalledCopy();
         var keepSettings = Directory.Exists(UserSettingsFolder) &&
             Win32.MessageBox(0, L.T("Keep your dock icons and settings, in case you install NETDock again?"), "NETDock",
                 Win32.MB_YESNO | Win32.MB_ICONQUESTION) == Win32.IDYES;
@@ -117,24 +115,35 @@ public static unsafe class Installer
         // A running exe can't delete itself: a hidden cmd removes the folder once this process has exited
         // (started last, so a slow click on the box above can't outlast its wait).
         if (Directory.Exists(InstallFolder))
-            Process.Start(new ProcessStartInfo("cmd.exe", $"/c ping -n 3 127.0.0.1 >nul & rmdir /s /q \"{InstallFolder}\"")
-                { UseShellExecute = false, CreateNoWindow = true });
+        {
+            // The path goes in through an environment variable: cmd expands %NETDOCK_DIR% once and never
+            // re-reads the result, so % or & in a profile path can't turn into a different folder.
+            var psi = new ProcessStartInfo("cmd.exe", "/d /c ping -n 3 127.0.0.1 >nul & rmdir /s /q \"%NETDOCK_DIR%\"")
+                { UseShellExecute = false, CreateNoWindow = true };
+            psi.Environment["NETDOCK_DIR"] = InstallFolder;
+            Process.Start(psi);
+        }
     }
 
-    /// <summary>Ask any running dock to close and wait for it (up to 10 s).</summary>
-    public static void CloseOtherInstances()
+    /// <summary>Close the installed copy if it's running (portable copies elsewhere are left alone); waits up to 10 s.</summary>
+    public static void CloseInstalledCopy()
     {
         var me = Environment.ProcessId;
         foreach (var p in Process.GetProcessesByName("NETDock"))
         {
-            if (p.Id == me) continue;
-            try
+            using (p)
             {
-                var dock = App.FindDockWindow();
-                if (dock != 0) Win32.PostMessage(dock, 0x10 /* WM_CLOSE */, 0, 0);
-                if (!p.WaitForExit(10_000)) p.Kill();
+                if (p.Id == me) continue;
+                var path = RunningApps.PathOfProcess((uint)p.Id);
+                if (path is null || !string.Equals(Path.GetDirectoryName(path), InstallFolder, StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    var dock = App.FindDockWindow(p.Id); // that process's own window
+                    if (dock != 0) Win32.PostMessage(dock, 0x10 /* WM_CLOSE */, 0, 0);
+                    if (!p.WaitForExit(10_000)) p.Kill();
+                }
+                catch { /* already gone */ }
             }
-            catch { /* already gone */ }
         }
     }
 

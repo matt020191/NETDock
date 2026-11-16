@@ -33,7 +33,17 @@ public static class DropRules
     /// <summary>Arguments for opening dropped paths with an app: its own arguments, then each path quoted.</summary>
     public static string OpenWithArguments(string? existing, IEnumerable<string> paths)
     {
-        var quoted = string.Join(' ', paths.Select(p => $"\"{p}\""));
+        var quoted = string.Join(' ', paths.Select(Quote));
         return string.IsNullOrWhiteSpace(existing) ? quoted : existing + " " + quoted;
+    }
+
+    /// <summary>
+    /// Quote one path for a Windows command line (CommandLineToArgvW rules): backslashes right before the closing
+    /// quote are doubled, so "C:\" doesn't end in \" and swallow the next argument.
+    /// </summary>
+    public static string Quote(string path)
+    {
+        var trailing = path.Length - path.TrimEnd('\\').Length;
+        return "\"" + path + new string('\\', trailing) + "\"";
     }
 }

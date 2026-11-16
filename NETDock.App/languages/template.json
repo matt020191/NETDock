@@ -50,6 +50,7 @@
   "Colour...": "",
   "Connected to the internet": "",
   "Could not write to {0}:\n{1}\n\nMove NETDock somewhere you can write to (not Program Files) to use portable mode.": "",
+  "Couldn't check the download's certificate with its issuer (no connection to the revocation server). Try again later.": "",
   "Couldn't install NETDock:\n{0}": "",
   "Couldn't reach the update server. Try again later.": "",
   "Couldn't update NETDock:\n{0}": "",

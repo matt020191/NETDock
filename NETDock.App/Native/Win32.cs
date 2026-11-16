@@ -212,7 +212,7 @@ public static unsafe partial class Win32
     [LibraryImport("kernel32.dll", SetLastError = true)] public static partial nint OpenProcess(uint access, [MarshalAs(UnmanagedType.Bool)] bool inherit, uint pid);
     [LibraryImport("kernel32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool CloseHandle(nint h);
     [LibraryImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool QueryFullProcessImageName(nint p, uint flags, char* buf, uint* size);
-    [LibraryImport("kernel32.dll", EntryPoint = "CreateMutexW", StringMarshalling = StringMarshalling.Utf16)] public static partial nint CreateMutex(nint attrs, [MarshalAs(UnmanagedType.Bool)] bool owner, string name);
+    [LibraryImport("kernel32.dll", EntryPoint = "CreateMutexW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)] public static partial nint CreateMutex(nint attrs, [MarshalAs(UnmanagedType.Bool)] bool owner, string name);
     [LibraryImport("kernel32.dll")] public static partial uint GetLastError();
 
     [LibraryImport("shell32.dll", EntryPoint = "ShellExecuteExW")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool ShellExecuteEx(SHELLEXECUTEINFOW* i);

@@ -16,6 +16,9 @@
     Keep this file ASCII-only: Windows PowerShell 5.1 reads BOM-less scripts as ANSI.
 
 .PARAMETER Notes        Release notes (markdown). Default: commit subjects since the previous tag.
+    Re-running after a failure past the tagging step resumes: the existing tag and release are reused and only
+    missing files are uploaded (the tag must point at HEAD).
+
 .PARAMETER NoPublish    Build and sign only; don't tag or touch GitHub.
 .PARAMETER GitHubToken  Token with contents:write on the repo; default $env:GITHUB_TOKEN, else the git credential for github.com.
 #>
@@ -49,7 +52,13 @@ if (-not $NoPublish) {
     if (git status --porcelain) { throw 'Working tree is not clean: commit first.' }
     git fetch -q origin
     if ((git rev-parse HEAD) -ne (git rev-parse '@{u}')) { throw 'HEAD is not pushed to origin.' }
-    if (git tag --list $tag) { throw "Tag $tag already exists: bump VERSION." }
+    # A tag for this exact commit means an earlier run got past tagging and then failed: carry on from there.
+    $resume = $false
+    if (git tag --list $tag) {
+        if ((git rev-list -n 1 $tag) -ne (git rev-parse HEAD)) { throw "Tag $tag already exists on another commit: bump VERSION." }
+        $resume = $true
+        Write-Ok "Tag $tag already points at HEAD: resuming the publish"
+    }
 }
 
 # ---------------------------------------------------------------------
@@ -128,13 +137,13 @@ $api = "https://api.github.com/repos/$GitHubRepo"
 $sha = git rev-parse HEAD
 
 if (-not $Notes) {
-    $prev = git tag --list 'v*' --sort=-v:refname | Select-Object -First 1  # (git describe errors when there's no tag yet)
+    $prev = git tag --list 'v*' --sort=-v:refname | Where-Object { $_ -ne $tag } | Select-Object -First 1  # (git describe errors when there's no tag yet)
     $range = if ($prev) { "$prev..HEAD" } else { 'HEAD' }
     $Notes = (git log $range --no-merges --format='- %s') -join "`n"
 }
 
 Write-Step "Tagging $tag on origin"
-git tag -a $tag -m "NETDock $version"
+if (-not $resume) { git tag -a $tag -m "NETDock $version" }
 git push -q origin $tag
 if ($LASTEXITCODE -ne 0) { throw 'Pushing the tag failed.' }
 
@@ -150,12 +159,20 @@ while ($true) {
 }
 Write-Ok 'Commit is on GitHub'
 
-Write-Step "Creating GitHub release $tag"
-$body = @{ tag_name = $tag; target_commitish = $sha; name = "NETDock $version"; body = $Notes; draft = $false; prerelease = $false } | ConvertTo-Json
-$release = Invoke-RestMethod -Method Post -Uri "$api/releases" -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body))
-Write-Ok "Release id $($release.id)"
+$release = $null
+try { $release = Invoke-RestMethod -Uri "$api/releases/tags/$tag" -Headers $headers } catch { $release = $null }
+if ($release) {
+    Write-Ok "Release $tag already exists (id $($release.id)): uploading any missing files"
+} else {
+    Write-Step "Creating GitHub release $tag"
+    $body = @{ tag_name = $tag; target_commitish = $sha; name = "NETDock $version"; body = $Notes; draft = $false; prerelease = $false } | ConvertTo-Json
+    $release = Invoke-RestMethod -Method Post -Uri "$api/releases" -Headers $headers -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body))
+    Write-Ok "Release id $($release.id)"
+}
+$existing = @($release.assets | ForEach-Object { $_.name })
 
 foreach ($f in Get-ChildItem $assets -File) {
+    if ($existing -contains $f.Name) { Write-Ok "$($f.Name) already uploaded"; continue }
     Write-Step "Uploading $($f.Name)"
     $type = if ($f.Extension -eq '.zip') { 'application/zip' } elseif ($f.Extension -eq '.sha256') { 'text/plain' } else { 'application/octet-stream' }
     Invoke-RestMethod -Method Post -Uri "https://uploads.github.com/repos/$GitHubRepo/releases/$($release.id)/assets?name=$([Uri]::EscapeDataString($f.Name))" `

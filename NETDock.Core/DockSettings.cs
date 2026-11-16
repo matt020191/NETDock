@@ -230,19 +230,30 @@ public sealed class DockSettings
         Items.RemoveAll(i => i is null);
         Modes ??= [];
         Modes.RemoveAll(m => m is null || string.IsNullOrWhiteSpace(m.Name));
-        foreach (var m in Modes) { m.Items ??= []; m.Items.RemoveAll(i => i is null); m.Windows ??= []; m.Windows.RemoveAll(w => w is null || w.Key is null); }
-        if (Modes.Count == 0) ActiveMode = null; // otherwise ModeSwitcher.Active adds a missing active entry
-        foreach (var i in Items)
+        foreach (var m in Modes)
         {
-            if (string.IsNullOrEmpty(i.Id)) i.Id = Guid.NewGuid().ToString("n");
-            if (i.Kind == ItemKind.Stack) i.Stack ??= new StackOptions();
-            if (i.Stack is { } s)
-            {
-                s.Columns = Math.Clamp(s.Columns, 0, 20);
-                s.MaxItems = Math.Clamp(s.MaxItems, 1, 2000);
-            }
+            m.Items ??= [];
+            m.Items.RemoveAll(i => i is null);
+            m.Windows ??= [];
+            m.Windows.RemoveAll(w => w is null || w.Key is null);
+            // Parked icons come back as the live list on a switch: they get the same checks.
+            foreach (var i in m.Items) SanitizeItem(i);
         }
+        if (Modes.Count == 0) ActiveMode = null;
+        else ModeSwitcher.Active(this); // repair a dangling ActiveMode here, once, not as a side effect elsewhere
+        foreach (var i in Items) SanitizeItem(i);
         return this;
+    }
+
+    private static void SanitizeItem(DockItem i)
+    {
+        if (string.IsNullOrEmpty(i.Id)) i.Id = Guid.NewGuid().ToString("n");
+        if (i.Kind == ItemKind.Stack) i.Stack ??= new StackOptions();
+        if (i.Stack is { } s)
+        {
+            s.Columns = Math.Clamp(s.Columns, 0, 20);
+            s.MaxItems = Math.Clamp(s.MaxItems, 1, 2000);
+        }
     }
 }
 

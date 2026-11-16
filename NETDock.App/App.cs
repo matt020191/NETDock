@@ -46,18 +46,17 @@ public sealed unsafe partial class App
             Installer.Uninstall();
             return 0;
         }
-        var mutex = Win32.CreateMutex(0, true, "NETDock.SingleInstance");
+        var running = !TryClaimSingleInstance();
         // Started by the installer or updater: the copy that started us is still exiting, so wait for it.
-        for (var tries = 0; Win32.GetLastError() == 183 && (Has("--after-install") || Has("--after-update")) && tries < 50; tries++)
+        for (var tries = 0; running && (Has("--after-install") || Has("--after-update")) && tries < 50; tries++)
         {
-            Win32.CloseHandle(mutex);
             Thread.Sleep(200);
-            mutex = Win32.CreateMutex(0, true, "NETDock.SingleInstance");
+            running = !TryClaimSingleInstance();
         }
-        if (Win32.GetLastError() == 183 /* ERROR_ALREADY_EXISTS */)
+        if (running)
         {
-            // Already running: hand "--settings" / "--icon-settings N" to that instance.
-            if (CommandFromArgs() is { } cmd && FindDock() is var dock and not 0) Win32.PostMessage(dock, WM_COMMAND_LINE, cmd, 0);
+            // Already running: hand "--settings" / "--icon-settings N" / "--mode" to that instance.
+            if (CommandFromArgs() is { } cmd && FindDockWindow() is var dock and not 0) Win32.PostMessage(dock, WM_COMMAND_LINE, cmd, 0);
             return 0;
         }
         Win32.OleInitialize(0);
@@ -79,6 +78,21 @@ public sealed unsafe partial class App
             Win32.MessageBox(0, ex.ToString(), L.T("NETDock failed to start"), Win32.MB_OK | Win32.MB_ICONWARNING);
             return 1;
         }
+    }
+
+    private static nint _instanceMutex;
+
+    /// <summary>Create the single-instance mutex; false when another NETDock already holds it.</summary>
+    private static bool TryClaimSingleInstance()
+    {
+        var h = Win32.CreateMutex(0, true, "NETDock.SingleInstance");
+        // The marshaller captured GetLastError right after the call (SetLastError = true); a separate
+        // GetLastError P/Invoke could see a value overwritten by the runtime in between.
+        var exists = System.Runtime.InteropServices.Marshal.GetLastPInvokeError() == 183; // ERROR_ALREADY_EXISTS
+        if (h == 0) return true; // couldn't create it at all: run rather than refuse to start
+        if (exists) { Win32.CloseHandle(h); return false; }
+        _instanceMutex = h;
+        return true;
     }
 
     private void Run()
@@ -151,14 +165,12 @@ public sealed unsafe partial class App
         Stack.Open(item, anchor);
     }
 
-    public void OnStackClosed() { }
-
-    /// <summary>Apply a whole new settings object (import), keeping the windows.</summary>
     /// <summary>Language folders: the data folder (portable copies travel with it), then next to the exe.</summary>
     public string?[] LanguageFolders => [Store.Location.LanguagesFolder, Path.Combine(ExeFolder, "languages")];
 
     public void LoadLanguage() => L.Load(L.Find(Settings.Language, LanguageFolders), Settings.Language);
 
+    /// <summary>Apply a whole new settings object (import), keeping the windows.</summary>
     public void Replace(DockSettings s)
     {
         Settings = s.Sanitize();
@@ -216,13 +228,9 @@ public sealed unsafe partial class App
         return null;
     }
 
-    private static nint FindDock() => FindWindow("NETDock.Dock", null);
-
-    [System.Runtime.InteropServices.LibraryImport("user32.dll", EntryPoint = "FindWindowW", StringMarshalling = System.Runtime.InteropServices.StringMarshalling.Utf16)]
-    private static partial nint FindWindow(string cls, string? title);
-
     public void RunCommandLine(nint cmd)
     {
+        if (PromptDialog.IsOpen) return; // finish the name prompt first
         if (cmd == -1) SettingsWindow.Show(this);
         else if (cmd == -99 && Settings.Modes.Count > 1)
         {
@@ -251,6 +259,11 @@ public sealed unsafe partial class App
 
     private nint _trayHwnd;
 
+    /// <summary>Broadcast when Explorer (re)creates the taskbar: tray icons must be added again.</summary>
+    public static readonly uint WM_TASKBARCREATED = Win32.RegisterWindowMessage("TaskbarCreated");
+
+    public void OnTaskbarCreated() => AddTray();
+
     private void AddTray()
     {
         _trayHwnd = Dock.Hwnd;
@@ -270,27 +283,19 @@ public sealed unsafe partial class App
 
     // ---------------------------------------------------------------- updates
 
-    private bool _manualCheck;
-
     /// <summary>The daily automatic check (called at start-up and hourly).</summary>
     public void MaybeCheckForUpdates()
     {
         if (!Settings.CheckForUpdates) return;
         if (Settings.LastUpdateCheck is { } last && DateTime.UtcNow - last < TimeSpan.FromDays(1)) return;
-        Updater.CheckAsync(Dock.Hwnd);
+        Updater.CheckAsync(Dock.Hwnd, manual: false);
     }
 
-    public void CheckForUpdatesNow()
-    {
-        _manualCheck = true;
-        Updater.CheckAsync(Dock.Hwnd);
-    }
+    public void CheckForUpdatesNow() => Updater.CheckAsync(Dock.Hwnd, manual: true);
 
-    /// <summary>A check finished: 1 = newer release, 0 = up to date, -1 = failed.</summary>
-    public void OnUpdateChecked(int result)
+    /// <summary>A check finished: 1 = newer release, 0 = up to date, -1 = failed; <paramref name="manual"/> = the user asked.</summary>
+    public void OnUpdateChecked(int result, bool manual)
     {
-        var manual = _manualCheck;
-        _manualCheck = false;
         if (result >= 0) { Settings.LastUpdateCheck = DateTime.UtcNow; Save(); }
         if (result < 0)
         {
@@ -299,7 +304,7 @@ public sealed unsafe partial class App
         }
         if (Updater.Available is not { } r)
         {
-            if (manual) Win32.MessageBox(Dock.Hwnd, L.F("NETDock {0} is the latest version.", Installer.Version), "NETDock", Win32.MB_OK | Win32.MB_ICONINFORMATION);
+            if (manual) Win32.MessageBox(Dock.Hwnd, L.F("NETDock {0} is the latest version.", AppVersion.Text), "NETDock", Win32.MB_OK | Win32.MB_ICONINFORMATION);
             return;
         }
         if (manual) OfferUpdate();
@@ -310,14 +315,21 @@ public sealed unsafe partial class App
     /// <summary>Show the release notes and update on Yes (No = skip this version's reminders).</summary>
     public void OfferUpdate()
     {
-        if (Updater.Available is not { } r) return;
+        if (Updater.Available is not { } r || Updater.Applying) return;
         var notes = r.Notes.Length > 900 ? r.Notes[..900] + "..." : r.Notes;
         var answer = Win32.MessageBox(Dock.Hwnd,
-            L.F("NETDock {0} is available (you have {1}).\n\n{2}\n\nUpdate and restart NETDock now?", r.Version, Installer.Version, notes.Trim()),
+            L.F("NETDock {0} is available (you have {1}).\n\n{2}\n\nUpdate and restart NETDock now?", r.Version, AppVersion.Text, notes.Trim()),
             "NETDock", Win32.MB_YESNO | Win32.MB_ICONQUESTION);
         if (answer != Win32.IDYES) { Settings.SkippedUpdate = r.Tag; Save(); return; }
         Save();
-        if (Updater.Apply(r, Dock.Hwnd)) Dock.Close();
+        Updater.ApplyAsync(r, Dock.Hwnd); // downloads off the UI thread; OnUpdateApplied follows
+    }
+
+    /// <summary>The update attempt finished: on success the new copy is starting, so this one closes.</summary>
+    public void OnUpdateApplied(bool ok)
+    {
+        if (ok) { Save(); Dock.Close(); return; }
+        Win32.MessageBox(Dock.Hwnd, L.F("Couldn't update NETDock:\n{0}", Updater.LastError ?? ""), "NETDock", Win32.MB_OK | Win32.MB_ICONWARNING);
     }
 
     public void InstallFromMenu()
@@ -352,12 +364,7 @@ public sealed unsafe partial class App
     public static bool StartsWithWindows
     {
         get { using var k = Registry.CurrentUser.OpenSubKey(RunKey); return k?.GetValue("NETDock") is not null; }
-        set
-        {
-            using var k = Registry.CurrentUser.CreateSubKey(RunKey);
-            if (value) k.SetValue("NETDock", $"\"{Environment.ProcessPath}\"");
-            else k.DeleteValue("NETDock", throwOnMissingValue: false);
-        }
+        set => SetStartup(value ? Environment.ProcessPath : null);
     }
 
     /// <summary>Point "start with Windows" at <paramref name="exe"/>, or remove it (null).</summary>
@@ -368,15 +375,15 @@ public sealed unsafe partial class App
         else k.DeleteValue("NETDock", throwOnMissingValue: false);
     }
 
-    /// <summary>The dock window of another running NETDock (not this process), or 0.</summary>
-    public static nint FindDockWindow()
+    /// <summary>The dock window of another running NETDock (not this process), or of process <paramref name="pid"/>; 0 if none.</summary>
+    public static nint FindDockWindow(int? pid = null)
     {
         nint h = 0;
         while ((h = FindWindowEx(0, h, "NETDock.Dock", null)) != 0)
         {
-            uint pid;
-            Win32.GetWindowThreadProcessId(h, &pid);
-            if (pid != (uint)Environment.ProcessId) return h;
+            uint owner;
+            Win32.GetWindowThreadProcessId(h, &owner);
+            if (pid is { } want ? owner == (uint)want : owner != (uint)Environment.ProcessId) return h;
         }
         return 0;
     }
