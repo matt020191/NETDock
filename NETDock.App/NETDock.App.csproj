@@ -10,6 +10,8 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <AssemblyName>NETDock</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Embedded as icon resource 32512, which App loads for windows and the tray. -->
+    <ApplicationIcon>..\assets\NETDock.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <!-- template.json lists every UI string for translators; real translations sit beside it as <Language>.json. -->

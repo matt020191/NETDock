@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/NETDock_1024.png" alt="NETDock logo" width="160"></p>
+
 # NETDock
 
 A RocketDock-style dock for Windows. It is a single native .NET 11 AOT executable (about 4 MB) with no runtime, WebView or browser engine. It draws with Direct2D into a per-pixel-alpha layered window.

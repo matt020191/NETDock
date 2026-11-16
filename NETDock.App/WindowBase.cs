@@ -26,7 +26,7 @@ public abstract unsafe class WindowBase
                     hInstance = Win32.GetModuleHandle(0),
                     hCursor = Win32.LoadCursor(0, 32512),
                     hIcon = App.AppIcon,
-                    hIconSm = App.AppIcon,
+                    hIconSm = App.AppIconSmall,
                     hbrBackground = (nint)(sysColor + 1), // COLOR_xxx + 1: BTNFACE by default, WINDOW (5) for settings
                     lpszClassName = cls,
                 };

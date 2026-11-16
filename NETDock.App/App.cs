@@ -8,6 +8,11 @@ public sealed unsafe partial class App
 {
     public const uint WM_TRAY = Win32.WM_APP + 2;
     public static nint AppIcon { get; private set; }
+    /// <summary>The 16 px (at 100 %) version, for the tray and title bars.</summary>
+    public static nint AppIconSmall { get; private set; }
+
+    /// <summary>The app icon at a given pixel size, picked from the .ico's own sizes. Caller destroys it.</summary>
+    public static nint LoadAppIcon(int px) => Win32.LoadImage(Win32.GetModuleHandle(0), 32512, 1 /* IMAGE_ICON */, px, px, 0);
 
     public DockSettings Settings { get; set; } = null!;
     public SettingsStore Store { get; }
@@ -41,6 +46,8 @@ public sealed unsafe partial class App
         {
             AppIcon = Win32.LoadImage(Win32.GetModuleHandle(0), 32512, 1, 0, 0, 0x40 /* LR_DEFAULTSIZE */);
             if (AppIcon == 0) AppIcon = Win32.LoadIcon(0, 32512);
+            AppIconSmall = Win32.LoadImage(Win32.GetModuleHandle(0), 32512, 1, Win32.GetSystemMetrics(49 /* SM_CXSMICON */), Win32.GetSystemMetrics(50), 0);
+            if (AppIconSmall == 0) AppIconSmall = AppIcon;
             D2D.Init();
             Ui.Init();
             var app = new App();
@@ -197,7 +204,7 @@ public sealed unsafe partial class App
     private void AddTray()
     {
         _trayHwnd = Dock.Hwnd;
-        var d = new NOTIFYICONDATAW { cbSize = (uint)sizeof(NOTIFYICONDATAW), hWnd = _trayHwnd, uID = 1, uFlags = 1 | 2 | 4, uCallbackMessage = WM_TRAY, hIcon = AppIcon };
+        var d = new NOTIFYICONDATAW { cbSize = (uint)sizeof(NOTIFYICONDATAW), hWnd = _trayHwnd, uID = 1, uFlags = 1 | 2 | 4, uCallbackMessage = WM_TRAY, hIcon = AppIconSmall };
         "NETDock".AsSpan().CopyTo(new Span<char>(d.szTip, 128));
         Win32.Shell_NotifyIcon(0, &d);
     }
