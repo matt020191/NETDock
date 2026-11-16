@@ -13,7 +13,7 @@ namespace NETDock.App;
 /// </summary>
 public sealed unsafe partial class DockWindow : WindowBase
 {
-    private const nuint AnimTimer = 1, RunningTimer = 2, RunningDebounce = 3, HideTimer = 4, PopTimer = 5, PreviewTimer = 6, VolumeTimer = 7, TileTimer = 8, AmbientTimer = 9;
+    private const nuint AnimTimer = 1, RunningTimer = 2, RunningDebounce = 3, HideTimer = 4, PopTimer = 5, PreviewTimer = 6, VolumeTimer = 7, TileTimer = 8, AmbientTimer = 9, UpdateTimer = 10;
     private D2DColor? _accent;
     private readonly App _app;
     private LayeredSurface _surface = null!;
@@ -364,6 +364,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         _work = mon.Work;
         _accent = Accent.For(Opt.AccentSync);
         if (Opt.AmbientGlow) Win32.SetTimer(Hwnd, AmbientTimer, 66, 0); else Win32.KillTimer(Hwnd, AmbientTimer);
+        Win32.SetTimer(Hwnd, UpdateTimer, 3_600_000, 0); // hourly look at whether the daily update check is due
         _scale = mon.Dpi / 96f;
         _base = _baseFull = Opt.IconSize * _scale;
         _max = (Opt.Magnify ? Opt.MagnifiedSize : Opt.IconSize) * _scale;
@@ -1286,6 +1287,9 @@ public sealed unsafe partial class DockWindow : WindowBase
                     case RunningTimer: RefreshRunning(); break;
                     case RunningDebounce: Win32.KillTimer(Hwnd, RunningDebounce); RefreshRunning(); break;
                     case PopTimer: PollPopUp(); break;
+                    case UpdateTimer:
+                        _app.MaybeCheckForUpdates();
+                        break;
                     case AmbientTimer:
                         if (_hide < 0.99) Render();
                         break;
@@ -1336,6 +1340,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         }
         if (msg == App.WM_TRAY) { _app.OnTray(this, (uint)l); return 0; }
         if (msg == App.WM_COMMAND_LINE) { _app.RunCommandLine(w); return 0; }
+        if (msg == Updater.WM_UPDATE_FOUND) { _app.OnUpdateChecked((int)w); return 0; }
         return Default(msg, w, l);
     }
 

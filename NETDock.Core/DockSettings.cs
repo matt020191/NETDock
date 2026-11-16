@@ -192,6 +192,11 @@ public sealed class DockSettings
     public List<string> IconFolders { get; set; } = [];
     /// <summary>Switchable icon sets (empty until the first mode is created).</summary>
     public List<DockMode> Modes { get; set; } = [];
+    /// <summary>Look for a new release once a day.</summary>
+    public bool CheckForUpdates { get; set; } = true;
+    public DateTime? LastUpdateCheck { get; set; }
+    /// <summary>A release the user chose to skip (its tag); no reminders for it.</summary>
+    public string? SkippedUpdate { get; set; }
     public string? ActiveMode { get; set; }
 
     /// <summary>Clamp every number into a range the renderer can draw, so a hand-edited file can't break it.</summary>

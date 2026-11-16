@@ -46,6 +46,7 @@ public static unsafe class Menus
             Win32.AppendMenu(menu, (check ? Win32.MF_CHECKED : 0) | (enabled ? 0 : Win32.MF_GRAYED), id, text);
         void Sep(nint menu) => Win32.AppendMenu(menu, Win32.MF_SEPARATOR, 0, null);
 
+        if (Updater.Available is { } upd) { Add(m, 330, L.F("Update to NETDock {0}...", upd.Version)); Sep(m); }
         Add(m, 98, L.T("Dock Settings..."));
         Sep(m);
         if (item is not null && item.Kind != ItemKind.Separator)
@@ -184,6 +185,10 @@ public static unsafe class Menus
         Add(data, 91, L.T("Export backup..."));
         Add(data, 92, L.T("Import backup..."));
         Add(data, 90, L.T("Import from RocketDock"), RocketDockConfig.IsInstalled);
+        Sep(data);
+        Add(data, 331, L.T("Check for updates now"));
+        Add(data, 332, L.T("Check for updates automatically"), app.Settings.CheckForUpdates);
+        if (!Installer.IsInstalled(app.ExeFolder)) Add(data, 333, L.T("Install NETDock (Start menu, Settings > Apps)..."));
         Sep(data);
         Add(data, 93, L.T("Open settings folder"));
         Add(data, 94, app.Store.Location.IsPortable ? "Portable mode (settings in .\\Data)" : L.T("Make portable (keep settings next to NETDock.exe)"),
@@ -397,6 +402,10 @@ public static unsafe class Menus
                 return;
             case 93: Directory.CreateDirectory(app.Store.Location.Folder); Launcher.Open(app.Store.Location.Folder); return;
             case 94: MakePortable(app, dock); return;
+            case 330: app.OfferUpdate(); return;
+            case 331: app.CheckForUpdatesNow(); return;
+            case 332: app.Settings.CheckForUpdates = !app.Settings.CheckForUpdates; app.Save(); return;
+            case 333: app.InstallFromMenu(); return;
             case 95: App.StartsWithWindows = !App.StartsWithWindows; return;
             case 99: dock.Close(); return;
             default: return;
