@@ -198,7 +198,7 @@ public sealed class DockSettings
         d.AutoHideDurationMs = Math.Clamp(d.AutoHideDurationMs, 0, 3_000);
         d.LabelSize = Math.Clamp(d.LabelSize, 8, 32);
         if (string.IsNullOrWhiteSpace(d.LabelFont) || d.LabelFont.Length > 64) d.LabelFont = "Segoe UI";
-        d.Monitor = Math.Max(0, d.Monitor);
+        d.Monitor = Math.Max(MonitorSpan.All, d.Monitor);
         // A skin is only ever a copy inside the data folder; anything else (absolute, UNC,
         // "..") from a hand-edited or imported file falls back to the built-in panel.
         if (!SettingsStore.IsDataReference(d.Skin, "skins/")) d.Skin = null;

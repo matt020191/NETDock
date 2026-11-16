@@ -194,7 +194,10 @@ public sealed unsafe class SettingsWindow : WindowBase
             var b = Monitors.Info(monitors[i]).Bounds;
             screens.Add($"Monitor {i + 1}  ({b.Width} x {b.Height})");
         }
-        Combo(ref y, "Screen", [.. screens], () => Math.Min(Opt.Monitor, screens.Count - 1), v => Opt.Monitor = v);
+        screens.Add("All monitors (one long edge)");
+        var spanIndex = screens.Count - 1;
+        Combo(ref y, "Screen", [.. screens], () => Opt.Monitor == MonitorSpan.All ? spanIndex : Math.Min(Opt.Monitor, spanIndex - 1),
+            v => Opt.Monitor = v == spanIndex ? MonitorSpan.All : v);
         Combo(ref y, "Screen edge", ["Bottom", "Top", "Left", "Right"], () => (int)Opt.Edge, v => Opt.Edge = (DockEdge)v);
         Slider(ref y, "Centering", 0, 100, () => (int)Math.Round(Opt.Centre * 100), v => Opt.Centre = v / 100.0, v => $"{v}%");
         Slider(ref y, "Edge offset", 0, 100, () => Opt.EdgeOffset, v => Opt.EdgeOffset = v, v => $"{v}px");

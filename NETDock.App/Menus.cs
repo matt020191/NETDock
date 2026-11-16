@@ -112,6 +112,7 @@ public static unsafe class Menus
             var info = Monitors.Info(monitors[i]);
             Add(edge, (uint)(55 + i), $"Monitor {i + 1} ({info.Bounds.Width}x{info.Bounds.Height})", o.Monitor == i + 1);
         }
+        if (monitors.Count > 1) Add(edge, 63, "All monitors (span)", o.Monitor == MonitorSpan.All);
         Sep(edge);
         Add(edge, 190, "Always on top", o.Layer == DockLayer.AlwaysOnTop);
         Add(edge, 191, "Normal", o.Layer == DockLayer.Normal);
@@ -254,6 +255,7 @@ public static unsafe class Menus
             case >= 190 and <= 192: o.Layer = (DockLayer)(cmd - 190); break;
             case 193: o.PopUp = !o.PopUp; break;
             case >= 55 and <= 62: o.Monitor = (int)cmd - 54; break;
+            case 63: o.Monitor = MonitorSpan.All; break;
             case >= 100 and < 110: o.IconSize = IconSizes[cmd - 100]; o.MagnifiedSize = Math.Max(o.MagnifiedSize, o.IconSize); break;
             case 70: o.Magnify = !o.Magnify; break;
             case >= 120 and < 130: o.MagnifiedSize = ZoomSizes[cmd - 120]; o.Magnify = true; break;

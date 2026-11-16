@@ -294,3 +294,17 @@ public class SpecialItemTests
         Assert.Equal(DropAction.Insert, DropRules.Decide(SpecialItems.Create(SpecialItems.Quit), 0.5));
     }
 }
+
+public class MonitorSpanTests
+{
+    // 1920x1040 work area (taskbar at the bottom) beside a taller 2560x1440 monitor with no taskbar.
+    private static readonly (int, int, int, int)[] Two = [(0, 0, 1920, 1040), (1920, -200, 4480, 1240)];
+
+    [Fact]
+    public void Bottom_dock_spans_both_and_sits_on_the_highest_bottom() =>
+        Assert.Equal((0, -200, 4480, 1040), MonitorSpan.Union(Two, DockEdge.Bottom));
+
+    [Fact]
+    public void Top_dock_sits_on_the_lowest_top() =>
+        Assert.Equal((0, 0, 4480, 1240), MonitorSpan.Union(Two, DockEdge.Top));
+}

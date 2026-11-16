@@ -133,7 +133,7 @@ public sealed unsafe partial class DockWindow : WindowBase
     /// <summary>Recompute everything that depends on settings, monitor or DPI.</summary>
     public void Relayout()
     {
-        var mon = Monitors.Pick(Opt.Monitor);
+        var mon = Opt.Monitor == MonitorSpan.All ? Monitors.Span(Opt.Edge) : Monitors.Pick(Opt.Monitor);
         _work = mon.Work;
         _scale = mon.Dpi / 96f;
         _base = Opt.IconSize * _scale;
@@ -1087,6 +1087,17 @@ public static unsafe class Monitors
         uint dx = 96, dy = 96;
         Win32.GetDpiForMonitor(mon, 0, &dx, &dy);
         return new MonitorInfo(mi.rcMonitor, mi.rcWork, dx);
+    }
+
+    /// <summary>Every monitor as one area for a spanning dock; DPI from the primary monitor.</summary>
+    public static MonitorInfo Span(DockEdge edge)
+    {
+        var infos = All().Select(Info).ToList();
+        var primary = Pick(0);
+        if (infos.Count < 2) return primary;
+        var (l, t, r, b) = MonitorSpan.Union([.. infos.Select(i => (i.Work.Left, i.Work.Top, i.Work.Right, i.Work.Bottom))], edge);
+        var (bl, bt, br, bb) = MonitorSpan.Union([.. infos.Select(i => (i.Bounds.Left, i.Bounds.Top, i.Bounds.Right, i.Bounds.Bottom))], edge);
+        return new MonitorInfo(new RECT(bl, bt, br, bb), new RECT(l, t, r, b), primary.Dpi);
     }
 
     public static MonitorInfo ForPoint(int x, int y) => Info(Win32.MonitorFromPoint(new POINT(x, y), 2 /* NEAREST */));
