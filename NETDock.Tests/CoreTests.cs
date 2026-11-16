@@ -308,3 +308,66 @@ public class MonitorSpanTests
     public void Top_dock_sits_on_the_lowest_top() =>
         Assert.Equal((0, 0, 4480, 1240), MonitorSpan.Union(Two, DockEdge.Top));
 }
+
+public class LanguageTests
+{
+    [Fact]
+    public void Missing_or_broken_language_files_fall_back_to_english()
+    {
+        var dir = Directory.CreateTempSubdirectory("netdock-lang").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "Pirate.json"), """{ "Exit NETDock": "Abandon ship", "Monitor {0} ({1}x{2})": "Spyglass {0}" }""");
+            File.WriteAllText(Path.Combine(dir, "Broken.json"), "{ not json");
+            File.WriteAllText(Path.Combine(dir, "template.json"), "{}");
+            Assert.Equal(["Broken", "Pirate"], L.Available(dir));
+            Assert.Null(L.Find(@"..\Pirate", dir));
+
+            L.Load(L.Find("Pirate", dir), "Pirate");
+            Assert.Equal("Abandon ship", L.T("Exit NETDock"));
+            Assert.Equal("Hide dock", L.T("Hide dock"));
+            Assert.Equal("Spyglass 2", L.F("Monitor {0} ({1}x{2})", 2, 1920, 1080));
+
+            L.Load(L.Find("Broken", dir), "Broken");
+            Assert.Null(L.Current);
+            Assert.Equal("Exit NETDock", L.T("Exit NETDock"));
+        }
+        finally { L.Load(null, null); Directory.Delete(dir, true); }
+    }
+
+    /// <summary>
+    /// Keeps NETDock.App/languages/template.json in step with every L.T / L.F string in the code.
+    /// When it is out of date the test rewrites it and fails once, so the change gets committed.
+    /// </summary>
+    [Fact]
+    public void Translation_template_lists_every_ui_string()
+    {
+        var root = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(root, "NETDock.slnx"))) root = Path.GetDirectoryName(root) ?? throw new InvalidOperationException("repo root not found");
+        var keys = new SortedSet<string>(StringComparer.Ordinal);
+        var call = new System.Text.RegularExpressions.Regex(@"\bL\.[TF]\(""((?:[^""\\]|\\.)*)""");
+        foreach (var dir in new[] { "NETDock.App", "NETDock.Core" })
+            foreach (var file in Directory.EnumerateFiles(Path.Combine(root, dir), "*.cs", SearchOption.AllDirectories))
+            {
+                if (file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}") || file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")) continue;
+                foreach (System.Text.RegularExpressions.Match m in call.Matches(File.ReadAllText(file)))
+                    keys.Add(System.Text.RegularExpressions.Regex.Unescape(m.Groups[1].Value));
+            }
+        var json = new System.Text.StringBuilder("{\n");
+        var i = 0;
+        foreach (var k in keys)
+            json.Append("  ").Append(System.Text.Json.JsonSerializer.Serialize(k, new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping })).Append(": \"\"").Append(++i < keys.Count ? ",\n" : "\n");
+        json.Append("}\n");
+
+        var path = Path.Combine(root, "NETDock.App", "languages", "template.json");
+        var expected = json.ToString();
+        var actual = File.Exists(path) ? File.ReadAllText(path).Replace("\r\n", "\n") : "";
+        if (actual != expected)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            File.WriteAllText(path, expected);
+        }
+        Assert.True(actual == expected, "languages/template.json was out of date and has been regenerated; commit it.");
+        Assert.True(keys.Count > 150);
+    }
+}

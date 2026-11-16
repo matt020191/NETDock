@@ -14,16 +14,18 @@ public sealed unsafe class SettingsWindow : WindowBase
     public static SettingsWindow? Current { get; private set; }
 
     private const int IdNav = 100, IdOk = 1, IdCancel = 2, IdDefaults = 10;
-    private static readonly (string Glyph, string Name)[] Pages =
+    // A property, not a field: re-read so a language change shows on the next open.
+    private static (string Glyph, string Name)[] Pages =>
     [
-        ("", "General"), ("", "Icons"), ("", "Position"),
-        ("", "Style"), ("", "Labels"), ("", "Behavior"), ("", "About"),
+        ("", L.T("General")), ("", L.T("Icons")), ("", L.T("Position")),
+        ("", L.T("Style")), ("", L.T("Labels")), ("", L.T("Behavior")), ("", L.T("About")),
     ];
 
     private readonly App _app;
     private Layout _ui = null!;
     private nint _font, _titleFont, _glyphFont, _nav, _title;
     private string _snapshot = "";
+    private string? _languageSnapshot;
     private bool _startWithWindows;
     private int _nextId = 200;
     private uint _accent;
@@ -48,6 +50,7 @@ public sealed unsafe class SettingsWindow : WindowBase
     private void Open()
     {
         _snapshot = JsonSerializer.Serialize(Opt, SettingsJson.Default.DockOptions);
+        _languageSnapshot = _app.Settings.Language;
         _startWithWindows = App.StartsWithWindows;
         _accent = Ui.AccentColor();
         _whiteBrush = Ui.GetSysColorBrush(5);
@@ -58,7 +61,7 @@ public sealed unsafe class SettingsWindow : WindowBase
         var scale = mon.Dpi / 96f;
         int w = (int)(684 * scale), h = (int)(644 * scale);
         Create("NETDock.Settings", Win32.WS_EX_DLGMODALFRAME, Win32.WS_POPUP | Win32.WS_CAPTION | Win32.WS_SYSMENU | 0x20000 /* MINIMIZEBOX */,
-            mon.Work.Left + (mon.Work.Width - w) / 2, mon.Work.Top + (mon.Work.Height - h) / 2, w, h, "Dock Settings", sysColor: 5);
+            mon.Work.Left + (mon.Work.Width - w) / 2, mon.Work.Top + (mon.Work.Height - h) / 2, w, h, L.T("Dock Settings"), sysColor: 5);
 
         _font = Ui.CreateFont(-(int)(12 * scale), 0, 0, 0, 400, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
         _titleFont = Ui.CreateFont(-(int)(20 * scale), 0, 0, 0, 600, 0, 0, 0, 1, 0, 0, 5, 0, "Segoe UI");
@@ -73,9 +76,9 @@ public sealed unsafe class SettingsWindow : WindowBase
 
         BuildGeneral(); BuildIcons(); BuildPosition(); BuildStyle(); BuildLabels(); BuildBehavior(); BuildAbout();
         _ui.Page = -1;
-        _ui.Button("Defaults", 12, 552, 110, 30, IdDefaults);
-        _ui.Button("OK", 448, 552, 100, 30, IdOk, isDefault: true);
-        _ui.Button("Cancel", 556, 552, 100, 30, IdCancel);
+        _ui.Button(L.T("Defaults"), 12, 552, 110, 30, IdDefaults);
+        _ui.Button(L.T("OK"), 448, 552, 100, 30, IdOk, isDefault: true);
+        _ui.Button(L.T("Cancel"), 556, 552, 100, 30, IdCancel);
 
         SelectPage(0);
         Win32.ShowWindow(Hwnd, Win32.SW_SHOW);
@@ -149,38 +152,44 @@ public sealed unsafe class SettingsWindow : WindowBase
         _ui.Page = 0;
         float y = 60;
         var id = Id();
-        var startup = _ui.Check("Start NETDock with Windows", X, y, Wide, id, _startWithWindows);
+        var startup = _ui.Check(L.T("Start NETDock with Windows"), X, y, Wide, id, _startWithWindows);
         _onCommand[id] = code => { if (code == Ui.BN_CLICKED) _startWithWindows = Layout.Checked(startup); };
         y += 30;
-        Check(ref y, "Lock icons (no dragging to reorder or remove)", () => Opt.Locked, v => Opt.Locked = v);
+        Check(ref y, L.T("Lock icons (no dragging to reorder or remove)"), () => Opt.Locked, v => Opt.Locked = v);
+        var languages = L.Available(_app.LanguageFolders);
+        var langItems = new List<string> { L.T("English (built in)") };
+        langItems.AddRange(languages);
+        Combo(ref y, L.T("Language (menus and windows opened from now on)"), [.. langItems],
+            () => _app.Settings.Language is { } cur ? Math.Max(0, languages.FindIndex(n => n.Equals(cur, StringComparison.OrdinalIgnoreCase)) + 1) : 0,
+            v => { _app.Settings.Language = v == 0 ? null : languages[v - 1]; _app.LoadLanguage(); });
 
         y += 16;
-        _ui.Group("Settings storage", X - 6, y, Wide + 6, 200);
+        _ui.Group(L.T("Settings storage"), X - 6, y, Wide + 6, 200);
         var loc = _app.Store.Location;
-        _ui.Label(loc.IsPortable ? "Portable: settings and icons are kept next to NETDock.exe" : "Settings are kept in your user profile",
+        _ui.Label(loc.IsPortable ? L.T("Portable: settings and icons are kept next to NETDock.exe") : L.T("Settings are kept in your user profile"),
             X + 8, y + 26, Wide - 24);
         var path = _ui.Edit(loc.Folder, X + 8, y + 50, Wide - 24, Id(), Ui.ES_READONLY);
         _ = path;
-        Btn(X + 8, y + 88, 140, "Open folder", () => { Directory.CreateDirectory(loc.Folder); Launcher.Open(loc.Folder); });
-        Btn(X + 156, y + 88, 140, "Export backup...", () => Menus.Run(_app, 91));
-        Btn(X + 304, y + 88, 140, "Import backup...", () => { Menus.Run(_app, 92); RefreshAll(); });
-        Btn(X + 8, y + 126, 140, "Import RocketDock...", () => { Menus.Run(_app, 90); RefreshAll(); });
-        if (!loc.IsPortable) Btn(X + 156, y + 126, 140, "Make portable...", () => Menus.Run(_app, 94));
+        Btn(X + 8, y + 88, 140, L.T("Open folder"), () => { Directory.CreateDirectory(loc.Folder); Launcher.Open(loc.Folder); });
+        Btn(X + 156, y + 88, 140, L.T("Export backup..."), () => Menus.Run(_app, 91));
+        Btn(X + 304, y + 88, 140, L.T("Import backup..."), () => { Menus.Run(_app, 92); RefreshAll(); });
+        Btn(X + 8, y + 126, 140, L.T("Import RocketDock..."), () => { Menus.Run(_app, 90); RefreshAll(); });
+        if (!loc.IsPortable) Btn(X + 156, y + 126, 140, L.T("Make portable..."), () => Menus.Run(_app, 94));
     }
 
     private void BuildIcons()
     {
         _ui.Page = 1;
         float y = 56;
-        Slider(ref y, "Opacity", 10, 100, () => Opt.IconOpacity, v => Opt.IconOpacity = v, v => $"{v}%");
-        Check(ref y, "Zoomed icons are fully opaque", () => Opt.ZoomOpaque, v => Opt.ZoomOpaque = v);
-        Slider(ref y, "Size", 16, 128, () => Opt.IconSize, v => { Opt.IconSize = v; Opt.MagnifiedSize = Math.Max(Opt.MagnifiedSize, v); }, v => $"{v}px");
-        Combo(ref y, "Hover effect", ["None", "Zoom"], () => Opt.Magnify ? 1 : 0, v => Opt.Magnify = v == 1);
-        Slider(ref y, "Zoom", 16, 256, () => Opt.MagnifiedSize, v => Opt.MagnifiedSize = Math.Max(v, Opt.IconSize), v => $"{v}px");
-        Slider(ref y, "Zoom width", 2, 16, () => (int)Math.Round(Opt.MagnifyRange * 2), v => Opt.MagnifyRange = v / 2.0, v => $"{v}");
-        Slider(ref y, "Zoom duration", 30, 600, () => Opt.ZoomDurationMs, v => Opt.ZoomDurationMs = v, v => $"{v}ms");
-        Slider(ref y, "Icon spacing", 0, 32, () => Opt.Spacing, v => Opt.Spacing = v, v => $"{v}px");
-        Slider(ref y, "Separator spacing", 0, 48, () => Opt.SeparatorSpacing, v => Opt.SeparatorSpacing = v, v => $"{v}px");
+        Slider(ref y, L.T("Opacity"), 10, 100, () => Opt.IconOpacity, v => Opt.IconOpacity = v, v => $"{v}%");
+        Check(ref y, L.T("Zoomed icons are fully opaque"), () => Opt.ZoomOpaque, v => Opt.ZoomOpaque = v);
+        Slider(ref y, L.T("Size"), 16, 128, () => Opt.IconSize, v => { Opt.IconSize = v; Opt.MagnifiedSize = Math.Max(Opt.MagnifiedSize, v); }, v => $"{v}px");
+        Combo(ref y, L.T("Hover effect"), [L.T("None"), L.T("Zoom")], () => Opt.Magnify ? 1 : 0, v => Opt.Magnify = v == 1);
+        Slider(ref y, L.T("Zoom"), 16, 256, () => Opt.MagnifiedSize, v => Opt.MagnifiedSize = Math.Max(v, Opt.IconSize), v => $"{v}px");
+        Slider(ref y, L.T("Zoom width"), 2, 16, () => (int)Math.Round(Opt.MagnifyRange * 2), v => Opt.MagnifyRange = v / 2.0, v => $"{v}");
+        Slider(ref y, L.T("Zoom duration"), 30, 600, () => Opt.ZoomDurationMs, v => Opt.ZoomDurationMs = v, v => $"{v}ms");
+        Slider(ref y, L.T("Icon spacing"), 0, 32, () => Opt.Spacing, v => Opt.Spacing = v, v => $"{v}px");
+        Slider(ref y, L.T("Separator spacing"), 0, 48, () => Opt.SeparatorSpacing, v => Opt.SeparatorSpacing = v, v => $"{v}px");
     }
 
     private void BuildPosition()
@@ -188,22 +197,22 @@ public sealed unsafe class SettingsWindow : WindowBase
         _ui.Page = 2;
         float y = 60;
         var monitors = Monitors.All();
-        var screens = new List<string> { "Primary monitor" };
+        var screens = new List<string> { L.T("Primary monitor") };
         for (var i = 0; i < monitors.Count; i++)
         {
             var b = Monitors.Info(monitors[i]).Bounds;
-            screens.Add($"Monitor {i + 1}  ({b.Width} x {b.Height})");
+            screens.Add(L.F("Monitor {0}  ({1} x {2})", i + 1, b.Width, b.Height));
         }
-        screens.Add("All monitors (one long edge)");
+        screens.Add(L.T("All monitors (one long edge)"));
         var spanIndex = screens.Count - 1;
-        Combo(ref y, "Screen", [.. screens], () => Opt.Monitor == MonitorSpan.All ? spanIndex : Math.Min(Opt.Monitor, spanIndex - 1),
+        Combo(ref y, L.T("Screen"), [.. screens], () => Opt.Monitor == MonitorSpan.All ? spanIndex : Math.Min(Opt.Monitor, spanIndex - 1),
             v => Opt.Monitor = v == spanIndex ? MonitorSpan.All : v);
-        Combo(ref y, "Screen edge", ["Bottom", "Top", "Left", "Right"], () => (int)Opt.Edge, v => Opt.Edge = (DockEdge)v);
-        Slider(ref y, "Centering", 0, 100, () => (int)Math.Round(Opt.Centre * 100), v => Opt.Centre = v / 100.0, v => $"{v}%");
-        Slider(ref y, "Edge offset", 0, 100, () => Opt.EdgeOffset, v => Opt.EdgeOffset = v, v => $"{v}px");
-        Combo(ref y, "Layering", ["Always on top", "Normal (in front when clicked)", "Always on bottom"], () => (int)Opt.Layer, v => Opt.Layer = (DockLayer)v);
-        Check(ref y, "Pop up on mouse-over (when not always on top)", () => Opt.PopUp, v => Opt.PopUp = v);
-        Slider(ref y, "Pop-up delay", 0, 2000, () => Opt.PopUpDelayMs, v => Opt.PopUpDelayMs = v, v => $"{v}ms");
+        Combo(ref y, L.T("Screen edge"), [L.T("Bottom"), L.T("Top"), L.T("Left"), L.T("Right")], () => (int)Opt.Edge, v => Opt.Edge = (DockEdge)v);
+        Slider(ref y, L.T("Centering"), 0, 100, () => (int)Math.Round(Opt.Centre * 100), v => Opt.Centre = v / 100.0, v => $"{v}%");
+        Slider(ref y, L.T("Edge offset"), 0, 100, () => Opt.EdgeOffset, v => Opt.EdgeOffset = v, v => $"{v}px");
+        Combo(ref y, L.T("Layering"), [L.T("Always on top"), L.T("Normal (in front when clicked)"), L.T("Always on bottom")], () => (int)Opt.Layer, v => Opt.Layer = (DockLayer)v);
+        Check(ref y, L.T("Pop up on mouse-over (when not always on top)"), () => Opt.PopUp, v => Opt.PopUp = v);
+        Slider(ref y, L.T("Pop-up delay"), 0, 2000, () => Opt.PopUpDelayMs, v => Opt.PopUpDelayMs = v, v => $"{v}ms");
     }
 
     private List<(string Name, string Reference, string? Source)> _skins = [];
@@ -212,11 +221,11 @@ public sealed unsafe class SettingsWindow : WindowBase
     {
         _ui.Page = 3;
         float y = 60;
-        Combo(ref y, "Style", ["Background panel (RocketDock)", "Platform shelf (macOS)"], () => (int)Opt.Style, v => Opt.Style = (DockStyle)v);
+        Combo(ref y, L.T("Style"), [L.T("Background panel (RocketDock)"), L.T("Platform shelf (macOS)")], () => (int)Opt.Style, v => Opt.Style = (DockStyle)v);
         _skins = Menus.SkinChoices(_app);
-        var names = new List<string> { "Built-in panel" };
+        var names = new List<string> { L.T("Built-in panel") };
         names.AddRange(_skins.Select(s => s.Name));
-        Combo(ref y, "Skin (background panel)", [.. names],
+        Combo(ref y, L.T("Skin (background panel)"), [.. names],
             () => Opt.Skin is null ? 0 : Math.Max(0, _skins.FindIndex(s => s.Reference == Opt.Skin) + 1),
             v =>
             {
@@ -224,26 +233,26 @@ public sealed unsafe class SettingsWindow : WindowBase
                 var choice = _skins[v - 1];
                 Opt.Skin = choice.Source is { } src ? _app.Store.ImportSkin(src) : choice.Reference;
             });
-        Slider(ref y, "Background opacity", 0, 100, () => Opt.BackgroundOpacity, v => Opt.BackgroundOpacity = v, v => $"{v}%");
-        Slider(ref y, "Panel padding (above and below icons)", 0, 16, () => Opt.PanelPadding, v => Opt.PanelPadding = v, v => $"{v}px");
-        Check(ref y, "Show running indicators", () => Opt.ShowRunningIndicators, v => Opt.ShowRunningIndicators = v);
-        Check(ref y, "Reflections (platform shelf)", () => Opt.Reflections, v => Opt.Reflections = v);
+        Slider(ref y, L.T("Background opacity"), 0, 100, () => Opt.BackgroundOpacity, v => Opt.BackgroundOpacity = v, v => $"{v}%");
+        Slider(ref y, L.T("Panel padding (above and below icons)"), 0, 16, () => Opt.PanelPadding, v => Opt.PanelPadding = v, v => $"{v}px");
+        Check(ref y, L.T("Show running indicators"), () => Opt.ShowRunningIndicators, v => Opt.ShowRunningIndicators = v);
+        Check(ref y, L.T("Reflections (platform shelf)"), () => Opt.Reflections, v => Opt.Reflections = v);
     }
 
     private void BuildLabels()
     {
         _ui.Page = 4;
         float y = 60;
-        Check(ref y, "Show labels on hover", () => Opt.ShowLabels, v => Opt.ShowLabels = v);
+        Check(ref y, L.T("Show labels on hover"), () => Opt.ShowLabels, v => Opt.ShowLabels = v);
         var fonts = Fonts.Installed();
         if (!fonts.Contains(Opt.LabelFont)) { fonts.Add(Opt.LabelFont); fonts.Sort(StringComparer.OrdinalIgnoreCase); }
-        Combo(ref y, "Font", [.. fonts], () => Math.Max(0, fonts.IndexOf(Opt.LabelFont)), v => Opt.LabelFont = fonts[v]);
-        Slider(ref y, "Size", 8, 32, () => Opt.LabelSize, v => Opt.LabelSize = v, v => $"{v}px");
-        Check(ref y, "Bold", () => Opt.LabelBold, v => Opt.LabelBold = v);
-        ColorRow(ref y, "Text", () => Opt.LabelColor, v => Opt.LabelColor = v, 0xFFFFFFFF);
-        ColorRow(ref y, "Outline", () => Opt.LabelOutlineColor, v => Opt.LabelOutlineColor = v, 0);
-        ColorRow(ref y, "Shadow", () => Opt.LabelShadowColor, v => Opt.LabelShadowColor = v, 0x99000000);
-        ColorRow(ref y, "Background", () => Opt.LabelBackgroundColor, v => Opt.LabelBackgroundColor = v, 0xC70D1219);
+        Combo(ref y, L.T("Font"), [.. fonts], () => Math.Max(0, fonts.IndexOf(Opt.LabelFont)), v => Opt.LabelFont = fonts[v]);
+        Slider(ref y, L.T("Size"), 8, 32, () => Opt.LabelSize, v => Opt.LabelSize = v, v => $"{v}px");
+        Check(ref y, L.T("Bold"), () => Opt.LabelBold, v => Opt.LabelBold = v);
+        ColorRow(ref y, L.T("Text"), () => Opt.LabelColor, v => Opt.LabelColor = v, 0xFFFFFFFF);
+        ColorRow(ref y, L.T("Outline"), () => Opt.LabelOutlineColor, v => Opt.LabelOutlineColor = v, 0);
+        ColorRow(ref y, L.T("Shadow"), () => Opt.LabelShadowColor, v => Opt.LabelShadowColor = v, 0x99000000);
+        ColorRow(ref y, L.T("Background"), () => Opt.LabelBackgroundColor, v => Opt.LabelBackgroundColor = v, 0xC70D1219);
     }
 
     /// <summary>"Title  [Colour...]  opacity ──●──  (n %)": RocketDock's colour + opacity pairs.</summary>
@@ -252,7 +261,7 @@ public sealed unsafe class SettingsWindow : WindowBase
         _ui.Label(title, X, y + 6, 80);
         var swatch = _ui.Label("", X + 82, y + 4, 26, 24, 0x1000 /* SS_SUNKEN */);
         _swatches[swatch] = () => ArgbColor.Parse(get(), fallback);
-        Btn(X + 116, y, 90, "Colour...", () =>
+        Btn(X + 116, y, 90, L.T("Colour..."), () =>
         {
             var argb = ArgbColor.Parse(get(), fallback);
             if (Dialogs.PickColor(Hwnd, argb & 0xFFFFFF) is { } rgb)
@@ -279,18 +288,18 @@ public sealed unsafe class SettingsWindow : WindowBase
     {
         _ui.Page = 5;
         float y = 60;
-        string[] effects = ["None", "Bounce", "Zoom", "Pulse", "Wobble"];
-        Combo(ref y, "Click effect (when launching)", effects, () => (int)Opt.ClickEffect, v => Opt.ClickEffect = (IconEffect)v);
-        Combo(ref y, "Attention effect (when an app's window flashes)", effects, () => (int)Opt.AttentionEffect, v => Opt.AttentionEffect = (IconEffect)v);
-        Check(ref y, "Minimise windows to the dock (shown after a separator; click to restore)", () => Opt.MinimizeToDock, v => Opt.MinimizeToDock = v);
-        Check(ref y, "Auto-hide", () => Opt.AutoHide, v => Opt.AutoHide = v);
-        Slider(ref y, "Auto-hide delay", 0, 3000, () => Opt.AutoHideDelayMs, v => Opt.AutoHideDelayMs = v, v => $"{v}ms");
-        Slider(ref y, "Auto-hide duration", 0, 1500, () => Opt.AutoHideDurationMs, v => Opt.AutoHideDurationMs = v, v => v == 0 ? "Instant" : $"{v}ms");
-        Combo(ref y, "Clicking a program that is already running", ["Switches to it (click again to minimise)", "Starts another copy"],
+        string[] effects = [L.T("None"), L.T("Bounce"), L.T("Zoom"), L.T("Pulse"), L.T("Wobble")];
+        Combo(ref y, L.T("Click effect (when launching)"), effects, () => (int)Opt.ClickEffect, v => Opt.ClickEffect = (IconEffect)v);
+        Combo(ref y, L.T("Attention effect (when an app's window flashes)"), effects, () => (int)Opt.AttentionEffect, v => Opt.AttentionEffect = (IconEffect)v);
+        Check(ref y, L.T("Minimise windows to the dock (shown after a separator; click to restore)"), () => Opt.MinimizeToDock, v => Opt.MinimizeToDock = v);
+        Check(ref y, L.T("Auto-hide"), () => Opt.AutoHide, v => Opt.AutoHide = v);
+        Slider(ref y, L.T("Auto-hide delay"), 0, 3000, () => Opt.AutoHideDelayMs, v => Opt.AutoHideDelayMs = v, v => $"{v}ms");
+        Slider(ref y, L.T("Auto-hide duration"), 0, 1500, () => Opt.AutoHideDurationMs, v => Opt.AutoHideDurationMs = v, v => v == 0 ? L.T("Instant") : $"{v}ms");
+        Combo(ref y, L.T("Clicking a program that is already running"), [L.T("Switches to it (click again to minimise)"), L.T("Starts another copy")],
             () => Opt.ActivateIfRunning ? 0 : 1, v => Opt.ActivateIfRunning = v == 0);
-        _ui.Label("Shift+click or middle-click always starts another copy; Ctrl+Shift+click runs as administrator.", X, y, Wide, 40);
+        _ui.Label(L.T("Shift+click or middle-click always starts another copy; Ctrl+Shift+click runs as administrator."), X, y, Wide, 40);
         y += 50;
-        _ui.Label("Show/hide hotkey", X, y, Wide);
+        _ui.Label(L.T("Show/hide hotkey"), X, y, Wide);
         var id = Id();
         var edit = _ui.Edit(Opt.ToggleHotkey ?? "", X + 70, y + 22, 180, id);
         var status = _ui.Label("", X + 260, y + 25, 220);
@@ -300,12 +309,12 @@ public sealed unsafe class SettingsWindow : WindowBase
             Opt.ToggleHotkey = text.Length == 0 ? null : text;
             var ok = Hotkey.Parse(text) is not null || text.Length == 0;
             var registered = ok && _app.Dock.RegisterToggleHotkey();
-            Ui.SetWindowText(status, text.Length == 0 ? "No hotkey" : !ok ? "Not a valid key, e.g. Ctrl+Alt+R" : registered ? "\u2713 Active" : "In use by another program");
+            Ui.SetWindowText(status, text.Length == 0 ? L.T("No hotkey") : !ok ? L.T("Not a valid key, e.g. Ctrl+Alt+R") : registered ? L.T("\u2713 Active") : L.T("In use by another program"));
         }
         _onCommand[id] = code => { if (code == Ui.EN_CHANGE) Validate(); };
         _refresh.Add(() => { Ui.SetWindowText(edit, Opt.ToggleHotkey ?? ""); Validate(); });
         Validate();
-        _ui.Label("Hides the whole dock until pressed again. Ctrl-drag moves or removes icons even when they are locked.", X, y + 56, Wide, 40);
+        _ui.Label(L.T("Hides the whole dock until pressed again. Ctrl-drag moves or removes icons even when they are locked."), X, y + 56, Wide, 40);
     }
 
     private void BuildAbout()
@@ -314,10 +323,10 @@ public sealed unsafe class SettingsWindow : WindowBase
         var version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "";
         float y = 60;
         _ui.Label($"NETDock {version}", X, y, Wide, 24); y += 28;
-        _ui.Label("A RocketDock-style dock for Windows. Native .NET 11 AOT, drawn with Direct2D.", X, y, Wide, 20); y += 40;
-        _ui.Label("Inspired by RocketDock (Punk Software) and Aero Dock (MIT, Ryan Panda).", X, y, Wide, 20); y += 24;
-        _ui.Label("RocketDock skins are read in their original format.", X, y, Wide, 20); y += 40;
-        _ui.Label("Settings: " + _app.Store.Location.SettingsFile, X, y, Wide, 40);
+        _ui.Label(L.T("A RocketDock-style dock for Windows. Native .NET 11 AOT, drawn with Direct2D."), X, y, Wide, 20); y += 40;
+        _ui.Label(L.T("Inspired by RocketDock (Punk Software) and Aero Dock (MIT, Ryan Panda)."), X, y, Wide, 20); y += 24;
+        _ui.Label(L.T("RocketDock skins are read in their original format."), X, y, Wide, 20); y += 40;
+        _ui.Label(L.T("Settings: ") + _app.Store.Location.SettingsFile, X, y, Wide, 40);
     }
 
     private void RefreshAll() { foreach (var r in _refresh) r(); }
@@ -334,6 +343,8 @@ public sealed unsafe class SettingsWindow : WindowBase
         else
         {
             _app.Settings.Dock = JsonSerializer.Deserialize(_snapshot, SettingsJson.Default.DockOptions)!;
+            _app.Settings.Language = _languageSnapshot;
+            _app.LoadLanguage();
             _app.Settings.Sanitize();
             _app.Dock.Relayout();
             _app.Dock.RegisterToggleHotkey();

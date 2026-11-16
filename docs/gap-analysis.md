@@ -35,8 +35,8 @@ Effort is rough: **S** = an hour or two, **M** = a session, **L** = several sess
 | 12 | ~~**Special items**~~ (done) | *Add item → Dock Settings* and *Quit* icons. | S | Low |
 | 13 | ~~**Minimise windows to the dock**~~ (done, without live previews) | Minimised windows become dock icons with live previews. A big feature that RocketDock was often unstable with. | L | Optional |
 | 14 | ~~**"Monitor \*" (span all)**~~ (done) | Treats all monitors as one long edge. | M | Low |
-| 15 | **Docklets** | RocketClock and ObjectDock docklets. These are 32-bit native DLLs, so a 64-bit dock can't load them; individual docklets would need rebuilding natively. | L | Low |
-| 16 | Languages | Around 50 translations. | M | Low |
+| 15 | ~~**Docklets**~~ (skipped: the only one in use was StackDocklet, which NETDock has built in) | RocketClock and ObjectDock docklets. These are 32-bit native DLLs, so a 64-bit dock can't load them; individual docklets would need rebuilding natively. | L | Low |
+| 16 | ~~Languages~~ (strings externalised; no translations yet) | Around 50 translations. | M | Low |
 
 ## Aero Dock features worth considering
 

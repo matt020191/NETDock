@@ -14,6 +14,7 @@ public sealed class DataLocation
     public bool IsPortable { get; }
     public string SettingsFile => Path.Combine(Folder, "settings.json");
     public string IconsFolder => Path.Combine(Folder, "icons");
+    public string LanguagesFolder => Path.Combine(Folder, "languages");
     /// <summary>Extracted target icons: machine-specific and rebuildable, so it never travels.</summary>
     public string CacheFolder { get; }
 

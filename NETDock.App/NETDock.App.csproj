@@ -12,6 +12,10 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
+    <!-- template.json lists every UI string for translators; real translations sit beside it as <Language>.json. -->
+    <None Include="languages\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\NETDock.Core\NETDock.Core.csproj" />
   </ItemGroup>
 </Project>

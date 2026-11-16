@@ -173,6 +173,8 @@ public sealed class DockSettings
     public DockOptions Dock { get; set; } = new();
     public List<DockItem> Items { get; set; } = [];
     public bool LaunchAtStartup { get; set; }
+    /// <summary>UI language file name (without .json) from a languages folder; null = English.</summary>
+    public string? Language { get; set; }
     /// <summary>Extra folders shown in Icon Settings' library (tokenized paths).</summary>
     public List<string> IconFolders { get; set; } = [];
 
@@ -228,4 +230,5 @@ public sealed class DockSettings
 [JsonSerializable(typeof(DockSettings))]
 [JsonSerializable(typeof(DockOptions))]
 [JsonSerializable(typeof(DockItem))]
+[JsonSerializable(typeof(Dictionary<string, string>))]
 public sealed partial class SettingsJson : JsonSerializerContext;

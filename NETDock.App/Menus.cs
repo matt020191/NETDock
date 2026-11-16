@@ -46,123 +46,123 @@ public static unsafe class Menus
             Win32.AppendMenu(menu, (check ? Win32.MF_CHECKED : 0) | (enabled ? 0 : Win32.MF_GRAYED), id, text);
         void Sep(nint menu) => Win32.AppendMenu(menu, Win32.MF_SEPARATOR, 0, null);
 
-        Add(m, 98, "Dock Settings...");
+        Add(m, 98, L.T("Dock Settings..."));
         Sep(m);
         if (item is not null && item.Kind != ItemKind.Separator)
         {
-            Add(m, 10, item.Kind == ItemKind.Stack ? "Open folder" : "Open");
-            if (item.Kind != ItemKind.Stack) Add(m, 11, "Run as administrator");
-            if (RecycleBin.Is(item)) Add(m, 17, "Empty Recycle Bin", enabled: RecycleBinService.IsFull);
-            else Add(m, 12, "Open file location");
+            Add(m, 10, item.Kind == ItemKind.Stack ? L.T("Open folder") : L.T("Open"));
+            if (item.Kind != ItemKind.Stack) Add(m, 11, L.T("Run as administrator"));
+            if (RecycleBin.Is(item)) Add(m, 17, L.T("Empty Recycle Bin"), enabled: RecycleBinService.IsFull);
+            else Add(m, 12, L.T("Open file location"));
             if (item.Kind == ItemKind.Stack)
             {
                 var st = item.Stack ??= new StackOptions();
                 var view = Win32.CreatePopupMenu(); subs.Add(view);
-                Add(view, 20, "Grid", st.View == StackView.Grid);
-                Add(view, 21, "List", st.View == StackView.List);
-                Add(view, 22, "Open folder on click", st.View == StackView.Open);
-                Win32.AppendMenu(m, Win32.MF_POPUP, (nuint)view, "Stack view");
+                Add(view, 20, L.T("Grid"), st.View == StackView.Grid);
+                Add(view, 21, L.T("List"), st.View == StackView.List);
+                Add(view, 22, L.T("Open folder on click"), st.View == StackView.Open);
+                Win32.AppendMenu(m, Win32.MF_POPUP, (nuint)view, L.T("Stack view"));
                 var sort = Win32.CreatePopupMenu(); subs.Add(sort);
-                Add(sort, 23, "Name", st.SortBy == StackSort.Name);
-                Add(sort, 24, "Date modified", st.SortBy == StackSort.DateModified);
-                Add(sort, 25, "Date created", st.SortBy == StackSort.DateCreated);
-                Add(sort, 26, "Type", st.SortBy == StackSort.Kind);
+                Add(sort, 23, L.T("Name"), st.SortBy == StackSort.Name);
+                Add(sort, 24, L.T("Date modified"), st.SortBy == StackSort.DateModified);
+                Add(sort, 25, L.T("Date created"), st.SortBy == StackSort.DateCreated);
+                Add(sort, 26, L.T("Type"), st.SortBy == StackSort.Kind);
                 Sep(sort);
-                Add(sort, 27, "Descending", st.SortDescending);
-                Add(sort, 28, "Folders first", st.FoldersFirst);
-                Add(sort, 29, "Show hidden files", st.ShowHidden);
-                Win32.AppendMenu(m, Win32.MF_POPUP, (nuint)sort, "Stack sort");
+                Add(sort, 27, L.T("Descending"), st.SortDescending);
+                Add(sort, 28, L.T("Folders first"), st.FoldersFirst);
+                Add(sort, 29, L.T("Show hidden files"), st.ShowHidden);
+                Win32.AppendMenu(m, Win32.MF_POPUP, (nuint)sort, L.T("Stack sort"));
                 var cols = Win32.CreatePopupMenu(); subs.Add(cols);
-                Add(cols, 30, "Automatic", st.Columns == 0);
-                for (var c = 3; c <= 10; c++) Add(cols, (uint)(28 + c), $"{c} columns", st.Columns == c);
-                Win32.AppendMenu(m, Win32.MF_POPUP, (nuint)cols, "Stack columns");
-                Add(m, 39, "Change folder...");
+                Add(cols, 30, L.T("Automatic"), st.Columns == 0);
+                for (var c = 3; c <= 10; c++) Add(cols, (uint)(28 + c), L.F("{0} columns", c), st.Columns == c);
+                Win32.AppendMenu(m, Win32.MF_POPUP, (nuint)cols, L.T("Stack columns"));
+                Add(m, 39, L.T("Change folder..."));
             }
             Sep(m);
-            Add(m, 13, "Icon Settings...");
-            Add(m, 14, "Change icon...");
-            Add(m, 15, "Use default icon", enabled: item.Icon is not null);
-            Add(m, 16, "Remove from dock");
+            Add(m, 13, L.T("Icon Settings..."));
+            Add(m, 14, L.T("Change icon..."));
+            Add(m, 15, L.T("Use default icon"), enabled: item.Icon is not null);
+            Add(m, 16, L.T("Remove from dock"));
             Sep(m);
         }
         else if (item is not null)
         {
-            Add(m, 16, "Remove separator");
+            Add(m, 16, L.T("Remove separator"));
             Sep(m);
         }
 
-        var add = Sub("Add");
-        Add(add, 42, "File or program...");
-        Add(add, 41, "Folder stack...");
-        Add(add, 40, "Separator");
+        var add = Sub(L.T("Add"));
+        Add(add, 42, L.T("File or program..."));
+        Add(add, 41, L.T("Folder stack..."));
+        Add(add, 40, L.T("Separator"));
         Sep(add);
-        Add(add, 43, "Dock Settings icon");
-        Add(add, 44, "Quit icon");
+        Add(add, 43, L.T("Dock Settings icon"));
+        Add(add, 44, L.T("Quit icon"));
 
-        var edge = Sub("Position");
-        Add(edge, 50, "Bottom", o.Edge == DockEdge.Bottom);
-        Add(edge, 51, "Top", o.Edge == DockEdge.Top);
-        Add(edge, 52, "Left", o.Edge == DockEdge.Left);
-        Add(edge, 53, "Right", o.Edge == DockEdge.Right);
+        var edge = Sub(L.T("Position"));
+        Add(edge, 50, L.T("Bottom"), o.Edge == DockEdge.Bottom);
+        Add(edge, 51, L.T("Top"), o.Edge == DockEdge.Top);
+        Add(edge, 52, L.T("Left"), o.Edge == DockEdge.Left);
+        Add(edge, 53, L.T("Right"), o.Edge == DockEdge.Right);
         Sep(edge);
-        Add(edge, 54, "Primary monitor", o.Monitor == 0);
+        Add(edge, 54, L.T("Primary monitor"), o.Monitor == 0);
         var monitors = Monitors.All();
         for (var i = 0; i < monitors.Count && i < 8; i++)
         {
             var info = Monitors.Info(monitors[i]);
-            Add(edge, (uint)(55 + i), $"Monitor {i + 1} ({info.Bounds.Width}x{info.Bounds.Height})", o.Monitor == i + 1);
+            Add(edge, (uint)(55 + i), L.F("Monitor {0} ({1}x{2})", i + 1, info.Bounds.Width, info.Bounds.Height), o.Monitor == i + 1);
         }
-        if (monitors.Count > 1) Add(edge, 63, "All monitors (span)", o.Monitor == MonitorSpan.All);
+        if (monitors.Count > 1) Add(edge, 63, L.T("All monitors (span)"), o.Monitor == MonitorSpan.All);
         Sep(edge);
-        Add(edge, 190, "Always on top", o.Layer == DockLayer.AlwaysOnTop);
-        Add(edge, 191, "Normal", o.Layer == DockLayer.Normal);
-        Add(edge, 192, "Always on bottom", o.Layer == DockLayer.AlwaysOnBottom);
-        Add(edge, 193, "Pop up on mouse-over", o.PopUp, o.Layer != DockLayer.AlwaysOnTop);
+        Add(edge, 190, L.T("Always on top"), o.Layer == DockLayer.AlwaysOnTop);
+        Add(edge, 191, L.T("Normal"), o.Layer == DockLayer.Normal);
+        Add(edge, 192, L.T("Always on bottom"), o.Layer == DockLayer.AlwaysOnBottom);
+        Add(edge, 193, L.T("Pop up on mouse-over"), o.PopUp, o.Layer != DockLayer.AlwaysOnTop);
 
-        var size = Sub("Icon size");
+        var size = Sub(L.T("Icon size"));
         for (var i = 0; i < IconSizes.Length; i++) Add(size, (uint)(100 + i), $"{IconSizes[i]} px", o.IconSize == IconSizes[i]);
-        var gap = Sub("Icon spacing");
-        for (var i = 0; i < Spacings.Length; i++) Add(gap, (uint)(160 + i), Spacings[i] == 0 ? "None" : $"{Spacings[i]} px", o.Spacing == Spacings[i]);
-        var sepGap = Sub("Separator spacing");
-        for (var i = 0; i < SepSpacings.Length; i++) Add(sepGap, (uint)(170 + i), SepSpacings[i] == 0 ? "None" : $"{SepSpacings[i]} px", o.SeparatorSpacing == SepSpacings[i]);
-        var zoom = Sub("Zoom size");
-        Add(zoom, 70, "Magnify on hover", o.Magnify);
+        var gap = Sub(L.T("Icon spacing"));
+        for (var i = 0; i < Spacings.Length; i++) Add(gap, (uint)(160 + i), Spacings[i] == 0 ? L.T("None") : $"{Spacings[i]} px", o.Spacing == Spacings[i]);
+        var sepGap = Sub(L.T("Separator spacing"));
+        for (var i = 0; i < SepSpacings.Length; i++) Add(sepGap, (uint)(170 + i), SepSpacings[i] == 0 ? L.T("None") : $"{SepSpacings[i]} px", o.SeparatorSpacing == SepSpacings[i]);
+        var zoom = Sub(L.T("Zoom size"));
+        Add(zoom, 70, L.T("Magnify on hover"), o.Magnify);
         Sep(zoom);
         for (var i = 0; i < ZoomSizes.Length; i++) Add(zoom, (uint)(120 + i), $"{ZoomSizes[i]} px", o.MagnifiedSize == ZoomSizes[i], ZoomSizes[i] >= o.IconSize);
 
-        var style = Sub("Style");
-        Add(style, 140, "Background panel (RocketDock)", o.Style == DockStyle.Panel);
-        Add(style, 141, "Platform shelf (macOS)", o.Style == DockStyle.Platform);
+        var style = Sub(L.T("Style"));
+        Add(style, 140, L.T("Background panel (RocketDock)"), o.Style == DockStyle.Panel);
+        Add(style, 141, L.T("Platform shelf (macOS)"), o.Style == DockStyle.Platform);
         Sep(style);
         var skins = SkinChoices(app);
-        Add(style, 210, "Built-in panel", o.Style == DockStyle.Panel && o.Skin is null, o.Style == DockStyle.Panel);
+        Add(style, 210, L.T("Built-in panel"), o.Style == DockStyle.Panel && o.Skin is null, o.Style == DockStyle.Panel);
         for (var i = 0; i < skins.Count && i < 80; i++)
             Add(style, (uint)(211 + i), skins[i].Name, o.Skin == skins[i].Reference, o.Style == DockStyle.Panel);
         _skinChoices = skins;
 
-        var view2 = Sub("Options");
-        Add(view2, 80, "Show labels", o.ShowLabels);
-        Add(view2, 81, "Reflections", o.Reflections);
-        Add(view2, 82, "Running indicators", o.ShowRunningIndicators);
-        Add(view2, 85, "Clicking a running app switches to it", o.ActivateIfRunning);
-        Add(view2, 83, "Auto-hide", o.AutoHide);
-        Add(view2, 86, "Minimise windows to the dock", o.MinimizeToDock);
-        Add(view2, 84, "Lock icons (Ctrl-drag still moves them)", o.Locked);
+        var view2 = Sub(L.T("Options"));
+        Add(view2, 80, L.T("Show labels"), o.ShowLabels);
+        Add(view2, 81, L.T("Reflections"), o.Reflections);
+        Add(view2, 82, L.T("Running indicators"), o.ShowRunningIndicators);
+        Add(view2, 85, L.T("Clicking a running app switches to it"), o.ActivateIfRunning);
+        Add(view2, 83, L.T("Auto-hide"), o.AutoHide);
+        Add(view2, 86, L.T("Minimise windows to the dock"), o.MinimizeToDock);
+        Add(view2, 84, L.T("Lock icons (Ctrl-drag still moves them)"), o.Locked);
         Sep(view2);
-        Add(view2, 95, "Start with Windows", App.StartsWithWindows);
+        Add(view2, 95, L.T("Start with Windows"), App.StartsWithWindows);
 
-        var data = Sub("Settings");
-        Add(data, 91, "Export backup...");
-        Add(data, 92, "Import backup...");
-        Add(data, 90, "Import from RocketDock", RocketDockConfig.IsInstalled);
+        var data = Sub(L.T("Settings"));
+        Add(data, 91, L.T("Export backup..."));
+        Add(data, 92, L.T("Import backup..."));
+        Add(data, 90, L.T("Import from RocketDock"), RocketDockConfig.IsInstalled);
         Sep(data);
-        Add(data, 93, "Open settings folder");
-        Add(data, 94, app.Store.Location.IsPortable ? "Portable mode (settings in .\\Data)" : "Make portable (keep settings next to NETDock.exe)",
+        Add(data, 93, L.T("Open settings folder"));
+        Add(data, 94, app.Store.Location.IsPortable ? "Portable mode (settings in .\\Data)" : L.T("Make portable (keep settings next to NETDock.exe)"),
             app.Store.Location.IsPortable, !app.Store.Location.IsPortable);
 
         Sep(m);
-        Add(m, 97, Hotkey.Parse(o.ToggleHotkey) is null ? "Hide dock" : $"Hide dock\t{o.ToggleHotkey}");
-        Add(m, 99, "Exit NETDock");
+        Add(m, 97, Hotkey.Parse(o.ToggleHotkey) is null ? L.T("Hide dock") : L.T("Hide dock") + "\t" + o.ToggleHotkey);
+        Add(m, 99, L.T("Exit NETDock"));
 
         Win32.SetForegroundWindow(dock.Hwnd);
         var cmd = (uint)Win32.TrackPopupMenuEx(m, Win32.TPM_RETURNCMD | Win32.TPM_RIGHTBUTTON, at.X, at.Y, dock.Hwnd, 0);
@@ -207,7 +207,7 @@ public static unsafe class Menus
                     case 29: st.ShowHidden = !st.ShowHidden; break;
                     case 30: st.Columns = 0; break;
                     case 39:
-                        if (Dialogs.PickFolder(dock.Hwnd, "Folder to show in this stack", app.Tokens.Expand(item.Target)) is { } f)
+                        if (Dialogs.PickFolder(dock.Hwnd, L.T("Folder to show in this stack"), app.Tokens.Expand(item.Target)) is { } f)
                         {
                             dock.ForgetIcon(item);
                             item.Target = app.Tokens.Tokenize(f)!;
@@ -226,7 +226,7 @@ public static unsafe class Menus
                 SettingsWindow.Show(app);
                 return;
             case 14 when item is not null:
-                if (Dialogs.PickFile(dock.Hwnd, "Choose an icon", "Icons and images\0*.png;*.ico;*.jpg;*.jpeg;*.bmp;*.exe;*.dll\0All files\0*.*\0",
+                if (Dialogs.PickFile(dock.Hwnd, L.T("Choose an icon"), "Icons and images\0*.png;*.ico;*.jpg;*.jpeg;*.bmp;*.exe;*.dll\0All files\0*.*\0",
                         initial: app.Store.ResolveDataIcon(item.Icon) ?? app.Store.Location.IconsFolder) is { } file)
                 {
                     dock.ForgetIcon(item);
@@ -242,11 +242,11 @@ public static unsafe class Menus
             case 44: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Quit)); break;
             case 40: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), new DockItem { Kind = ItemKind.Separator }); break;
             case 41:
-                if (Dialogs.PickFolder(dock.Hwnd, "Folder to show as a stack") is { } folder && ItemFactory.FromPath(folder, app.Tokens) is { } s)
+                if (Dialogs.PickFolder(dock.Hwnd, L.T("Folder to show as a stack")) is { } folder && ItemFactory.FromPath(folder, app.Tokens) is { } s)
                     app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), s);
                 break;
             case 42:
-                if (Dialogs.PickFile(dock.Hwnd, "Add to dock", "Programs and shortcuts\0*.exe;*.lnk;*.bat;*.cmd;*.url\0All files\0*.*\0", dereferenceLinks: false) is { } p
+                if (Dialogs.PickFile(dock.Hwnd, L.T("Add to dock"), "Programs and shortcuts\0*.exe;*.lnk;*.bat;*.cmd;*.url\0All files\0*.*\0", dereferenceLinks: false) is { } p
                     && ItemFactory.FromPath(p, app.Tokens) is { } it)
                     app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), it);
                 break;
@@ -279,7 +279,7 @@ public static unsafe class Menus
             case 84: o.Locked = !o.Locked; break;
             case 85: o.ActivateIfRunning = !o.ActivateIfRunning; break;
             case 90:
-                if (Win32.MessageBox(dock.Hwnd, "Replace the current dock with your RocketDock icons?\n\nChoose No to add them after the current icons.",
+                if (Win32.MessageBox(dock.Hwnd, L.T("Replace the current dock with your RocketDock icons?\n\nChoose No to add them after the current icons."),
                         "NETDock", Win32.MB_YESNO | Win32.MB_ICONQUESTION) is var r)
                 {
                     var summary = app.ImportRocketDock(replace: r == Win32.IDYES);
@@ -289,17 +289,17 @@ public static unsafe class Menus
                 }
                 return;
             case 91:
-                if (Dialogs.SaveFile(dock.Hwnd, "Export NETDock backup", $"NETDock-{Environment.MachineName}-{DateTime.Now:yyyyMMdd}.zip") is { } zip)
+                if (Dialogs.SaveFile(dock.Hwnd, L.T("Export NETDock backup"), $"NETDock-{Environment.MachineName}-{DateTime.Now:yyyyMMdd}.zip") is { } zip)
                 {
                     app.Store.Export(app.Settings, zip);
-                    Win32.MessageBox(dock.Hwnd, $"Saved settings and custom icons to\n{zip}\n\nUse Settings > Import backup on another PC.", "NETDock", Win32.MB_OK | Win32.MB_ICONINFORMATION);
+                    Win32.MessageBox(dock.Hwnd, L.F("Saved settings and custom icons to\n{0}\n\nUse Settings > Import backup on another PC.", zip), "NETDock", Win32.MB_OK | Win32.MB_ICONINFORMATION);
                 }
                 return;
             case 92:
-                if (Dialogs.PickFile(dock.Hwnd, "Import NETDock backup", "NETDock backup\0*.zip\0") is { } inZip)
+                if (Dialogs.PickFile(dock.Hwnd, L.T("Import NETDock backup"), "NETDock backup\0*.zip\0") is { } inZip)
                 {
                     try { app.Replace(app.Store.Import(inZip)); }
-                    catch (Exception ex) { Win32.MessageBox(dock.Hwnd, ex.Message, "Import failed", Win32.MB_OK | Win32.MB_ICONWARNING); }
+                    catch (Exception ex) { Win32.MessageBox(dock.Hwnd, ex.Message, L.T("Import failed"), Win32.MB_OK | Win32.MB_ICONWARNING); }
                 }
                 return;
             case 93: Directory.CreateDirectory(app.Store.Location.Folder); Launcher.Open(app.Store.Location.Folder); return;
@@ -324,12 +324,12 @@ public static unsafe class Menus
                 foreach (var f in Directory.EnumerateFiles(app.Store.Location.IconsFolder))
                     SettingsStore.CopyOver(f, Path.Combine(data, "icons", Path.GetFileName(f)));
             Win32.MessageBox(dock.Hwnd,
-                $"Settings and icons copied to\n{data}\n\nNETDock will use that folder from its next start. Copy the whole NETDock folder to move your dock to another PC.",
+                L.F("Settings and icons copied to\n{0}\n\nNETDock will use that folder from its next start. Copy the whole NETDock folder to move your dock to another PC.", data),
                 "NETDock", Win32.MB_OK | Win32.MB_ICONINFORMATION);
         }
         catch (Exception ex)
         {
-            Win32.MessageBox(dock.Hwnd, $"Could not write to {data}:\n{ex.Message}\n\nMove NETDock somewhere you can write to (not Program Files) to use portable mode.",
+            Win32.MessageBox(dock.Hwnd, L.F("Could not write to {0}:\n{1}\n\nMove NETDock somewhere you can write to (not Program Files) to use portable mode.", data, ex.Message),
                 "NETDock", Win32.MB_OK | Win32.MB_ICONWARNING);
         }
     }

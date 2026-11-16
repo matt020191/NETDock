@@ -192,10 +192,10 @@ public sealed unsafe class StackFlyout : WindowBase
         var title = nested ? Path.GetFileName(_path.Peek()) : _item.Name;
         s.DrawText(title, _headerFormat, new D2DRect(titleLeft, 0, OpenButton.L - 8 * _s, _headerH), new D2DColor(1, 1, 1, 1));
         s.FillRoundRect(OpenButton, 6 * _s, new D2DColor(1, 1, 1, _hover == -3 ? 0.2f : 0.08f));
-        s.DrawText("Open", _listFormat, new D2DRect(OpenButton.L + 14 * _s, OpenButton.T, OpenButton.R, OpenButton.B), new D2DColor(1, 1, 1, 0.9f));
+        s.DrawText(L.T("Open"), _listFormat, new D2DRect(OpenButton.L + 14 * _s, OpenButton.T, OpenButton.R, OpenButton.B), new D2DColor(1, 1, 1, 0.9f));
 
         if (_entries.Count == 0)
-            s.DrawText(Directory.Exists(_path.Peek()) ? "This folder is empty" : "Folder not found: " + _path.Peek(),
+            s.DrawText(Directory.Exists(_path.Peek()) ? L.T("This folder is empty") : L.T("Folder not found: ") + _path.Peek(),
                 _listFormat, new D2DRect(_margin, _headerH, _w - _margin, _h - _margin), new D2DColor(1, 1, 1, 0.6f));
 
         var first = _scroll * _cols;
@@ -301,10 +301,10 @@ public sealed unsafe class StackFlyout : WindowBase
     private void EntryMenu(string path)
     {
         var m = Win32.CreatePopupMenu();
-        Win32.AppendMenu(m, 0, 1, "Open");
-        Win32.AppendMenu(m, 0, 2, "Run as administrator");
-        Win32.AppendMenu(m, 0, 3, "Show in folder");
-        Win32.AppendMenu(m, 0, 4, "Pin to dock");
+        Win32.AppendMenu(m, 0, 1, L.T("Open"));
+        Win32.AppendMenu(m, 0, 2, L.T("Run as administrator"));
+        Win32.AppendMenu(m, 0, 3, L.T("Show in folder"));
+        Win32.AppendMenu(m, 0, 4, L.T("Pin to dock"));
         POINT p;
         Win32.GetCursorPos(&p);
         _menuOpen = true;

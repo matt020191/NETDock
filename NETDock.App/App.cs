@@ -48,7 +48,7 @@ public sealed unsafe partial class App
         catch (Exception ex)
         {
             Log(ex);
-            Win32.MessageBox(0, ex.ToString(), "NETDock failed to start", Win32.MB_OK | Win32.MB_ICONWARNING);
+            Win32.MessageBox(0, ex.ToString(), L.T("NETDock failed to start"), Win32.MB_OK | Win32.MB_ICONWARNING);
             return 1;
         }
     }
@@ -56,6 +56,7 @@ public sealed unsafe partial class App
     private void Run()
     {
         Settings = Store.Load();
+        LoadLanguage();
         if (Environment.GetCommandLineArgs().Contains("--import-rocketdock", StringComparer.OrdinalIgnoreCase)
             && ImportRocketDock(replace: true) is not null)
             Save(); // unattended: no prompts, no summary box
@@ -64,7 +65,7 @@ public sealed unsafe partial class App
         if (firstRun)
         {
             if (RocketDockConfig.IsInstalled
-                && Win32.MessageBox(0, "RocketDock settings were found on this PC.\n\nImport your RocketDock icons into NETDock?",
+                && Win32.MessageBox(0, L.T("RocketDock settings were found on this PC.\n\nImport your RocketDock icons into NETDock?"),
                     "NETDock", Win32.MB_YESNO | Win32.MB_ICONQUESTION) == Win32.IDYES)
                 summary = ImportRocketDock(replace: true);
             if (Settings.Items.Count == 0) Settings.Items.AddRange(Defaults());
@@ -116,9 +117,15 @@ public sealed unsafe partial class App
     public void OnStackClosed() { }
 
     /// <summary>Apply a whole new settings object (import), keeping the windows.</summary>
+    /// <summary>Language folders: the data folder (portable copies travel with it), then next to the exe.</summary>
+    public string?[] LanguageFolders => [Store.Location.LanguagesFolder, Path.Combine(ExeFolder, "languages")];
+
+    public void LoadLanguage() => L.Load(L.Find(Settings.Language, LanguageFolders), Settings.Language);
+
     public void Replace(DockSettings s)
     {
         Settings = s.Sanitize();
+        LoadLanguage();
         Save();
         Icons.Forget(_ => true);
         Dock.Relayout();
@@ -137,14 +144,14 @@ public sealed unsafe partial class App
             if (replace && result.SkinFolder is { } skin) Settings.Dock.Skin = Store.ImportSkin(skin);
             else Settings.Items.AddRange(result.Settings.Items);
             Settings.Sanitize();
-            var msg = $"Imported {result.Settings.Items.Count} items from RocketDock ({folder}).";
+            var msg = L.F("Imported {0} items from RocketDock ({1}).", result.Settings.Items.Count, folder);
             if (result.Notes.Count > 0) msg += "\n\n" + string.Join("\n", result.Notes);
             return msg;
         }
         catch (Exception ex)
         {
             Log(ex);
-            Win32.MessageBox(0, "RocketDock import failed:\n" + ex.Message, "NETDock", Win32.MB_OK | Win32.MB_ICONWARNING);
+            Win32.MessageBox(0, L.T("RocketDock import failed:\n") + ex.Message, "NETDock", Win32.MB_OK | Win32.MB_ICONWARNING);
             return null;
         }
     }

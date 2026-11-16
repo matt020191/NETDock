@@ -57,7 +57,7 @@ public sealed unsafe class IconSettingsDialog : WindowBase
         var mon = Monitors.ForPoint(p.X, p.Y);
         var scale = mon.Dpi / 96f;
         int w = (int)(676 * scale), h = (int)(684 * scale); // outer size: client is ~16 x 40 smaller
-        var title = string.IsNullOrWhiteSpace(_item.Name) ? "Icon Settings" : $"Icon Settings - {_item.Name}";
+        var title = string.IsNullOrWhiteSpace(_item.Name) ? L.T("Icon Settings") : L.F("Icon Settings - {0}", _item.Name);
         Create("NETDock.IconSettings", Win32.WS_EX_DLGMODALFRAME, Win32.WS_POPUP | Win32.WS_CAPTION | Win32.WS_SYSMENU,
             mon.Work.Left + (mon.Work.Width - w) / 2, mon.Work.Top + (mon.Work.Height - h) / 2, w, h, title, sysColor: 5);
         _whiteBrush = Ui.GetSysColorBrush(5);
@@ -68,15 +68,15 @@ public sealed unsafe class IconSettingsDialog : WindowBase
         _app.Icons.AddListener(Hwnd);
 
         // Library
-        _ui.Group("Folders", 12, 8, 240, 336);
+        _ui.Group(L.T("Folders"), 12, 8, 240, 336);
         _tree = _ui.Add("SysTreeView32", null, Ui.TVS_HASBUTTONS | Ui.TVS_LINESATROOT | Ui.TVS_SHOWSELALWAYS | Ui.TVS_FULLROWSELECT | Win32.WS_TABSTOP | Win32.WS_BORDER,
             22, 30, 220, 268, IdTree);
         Ui.SetWindowTheme(_tree, "Explorer", null);
         _ui.Button("−", 22, 304, 34, 28, IdRemoveFolder);
         _ui.Button("+", 60, 304, 34, 28, IdAddFolder);
-        _ui.Label("Add your own icon folders", 102, 310, 140);
+        _ui.Label(L.T("Add your own icon folders"), 102, 310, 140);
 
-        _ui.Group("Icons", 262, 8, 386, 336);
+        _ui.Group(L.T("Icons"), 262, 8, 386, 336);
         _list = _ui.Add("SysListView32", null, Ui.LVS_ICON | Ui.LVS_SINGLESEL | Ui.LVS_SHOWSELALWAYS | Ui.LVS_AUTOARRANGE | Ui.LVS_SHAREIMAGELISTS | Win32.WS_TABSTOP | Win32.WS_BORDER,
             272, 30, 366, 268, IdList);
         Ui.SetWindowTheme(_list, "Explorer", null);
@@ -84,26 +84,26 @@ public sealed unsafe class IconSettingsDialog : WindowBase
         _imageList = Ui.ImageList_Create(_iconPx, _iconPx, 0x20 /* ILC_COLOR32 */, 64, 64);
         Win32.SendMessage(_list, Ui.LVM_SETIMAGELIST, 0, _imageList);
         Win32.SendMessage(_list, Ui.LVM_SETICONSPACING, 0, Win32.MakeLParam(_ui.S(86), _ui.S(84)));
-        _ui.Button("Browse for an icon...", 272, 304, 170, 28, IdBrowseIcon);
-        _ui.Label("PNG, ICO, or any EXE/DLL", 450, 310, 190);
+        _ui.Button(L.T("Browse for an icon..."), 272, 304, 170, 28, IdBrowseIcon);
+        _ui.Label(L.T("PNG, ICO, or any EXE/DLL"), 450, 310, 190);
 
         // Preview
-        _ui.Group("Preview", 12, 352, 240, 228);
+        _ui.Group(L.T("Preview"), 12, 352, 240, 228);
         if (HasStates)
         {
             // RocketDock's "Icon state" dropdown: the Recycle Bin has an icon for empty and for full.
-            _ui.Combo(22, 374, 220, IdState, ["Empty", "Full (has items)"], 0);
+            _ui.Combo(22, 374, 220, IdState, [L.T("Empty"), L.T("Full (has items)")], 0);
             _preview = _ui.Add("STATIC", null, Ui.SS_OWNERDRAW, 22, 406, 220, 164, IdPreview);
         }
         else _preview = _ui.Add("STATIC", null, Ui.SS_OWNERDRAW, 22, 374, 220, 196, IdPreview);
 
         // Properties
-        _ui.Group("Properties", 262, 352, 386, 228);
+        _ui.Group(L.T("Properties"), 262, 352, 386, 228);
         BuildProperties();
 
-        _ui.Button("Default icon", 12, 592, 120, 30, IdDefaultIcon);
-        _ui.Button("OK", 440, 592, 100, 30, IdOk, isDefault: true);
-        _ui.Button("Cancel", 548, 592, 100, 30, IdCancel);
+        _ui.Button(L.T("Default icon"), 12, 592, 120, 30, IdDefaultIcon);
+        _ui.Button(L.T("OK"), 440, 592, 100, 30, IdOk, isDefault: true);
+        _ui.Button(L.T("Cancel"), 548, 592, 100, 30, IdCancel);
 
         BuildTree();
         UpdatePreview();
@@ -118,12 +118,12 @@ public sealed unsafe class IconSettingsDialog : WindowBase
         float y = 374;
         void Row(string label) => _ui.Label(label, lx, y + 3, lw, 20, Ui.SS_RIGHT);
 
-        Row("Name");
+        Row(L.T("Name"));
         _ui.Edit(_item.Name, ex, y, 278, IdName);
         y += 31;
         if (_item.Kind == ItemKind.Separator) return;
 
-        Row(IsStack ? "Folder" : _item.Kind == ItemKind.Shortcut ? "Shortcut" : "Target");
+        Row(IsStack ? L.T("Folder") : _item.Kind == ItemKind.Shortcut ? L.T("Shortcut") : L.T("Target"));
         _ui.Edit(_item.Target, ex, y, ew, IdTarget);
         _ui.Button("...", bx, y, 26, 24, IdBrowseTarget);
         y += 31;
@@ -131,33 +131,33 @@ public sealed unsafe class IconSettingsDialog : WindowBase
         if (IsStack)
         {
             var st = _item.Stack ??= new StackOptions();
-            Row("View");
-            _ui.Combo(ex, y, 278, IdView, ["Grid", "List", "Open the folder"], (int)st.View);
+            Row(L.T("View"));
+            _ui.Combo(ex, y, 278, IdView, [L.T("Grid"), L.T("List"), L.T("Open the folder")], (int)st.View);
             y += 31;
-            Row("Sort by");
-            _ui.Combo(ex, y, 278, IdSort, ["Name", "Date modified", "Date created", "Type"], (int)st.SortBy);
+            Row(L.T("Sort by"));
+            _ui.Combo(ex, y, 278, IdSort, [L.T("Name"), L.T("Date modified"), L.T("Date created"), L.T("Type")], (int)st.SortBy);
             y += 33;
-            _ui.Check("Descending", ex, y, 130, IdDescending, st.SortDescending);
-            _ui.Check("Folders first", ex + 140, y, 140, IdFoldersFirst, st.FoldersFirst);
+            _ui.Check(L.T("Descending"), ex, y, 130, IdDescending, st.SortDescending);
+            _ui.Check(L.T("Folders first"), ex + 140, y, 140, IdFoldersFirst, st.FoldersFirst);
             return;
         }
 
-        Row("Start in");
+        Row(L.T("Start in"));
         var dir = _ui.Edit(_item.WorkingDirectory ?? "", ex, y, ew, IdDir);
-        var cue = _item.Kind == ItemKind.Shortcut ? "(from the shortcut)" : "(the program's folder)";
+        var cue = _item.Kind == ItemKind.Shortcut ? L.T("(from the shortcut)") : L.T("(the program's folder)");
         fixed (char* c = cue) Win32.SendMessage(dir, Ui.EM_SETCUEBANNER, 1, (nint)c);
         _ui.Button("...", bx, y, 26, 24, IdBrowseDir);
         y += 31;
-        Row("Arguments");
+        Row(L.T("Arguments"));
         _ui.Edit(_item.Arguments ?? "", ex, y, 278, IdArgs);
         y += 31;
-        Row("Run");
-        _ui.Combo(ex, y, 278, IdRun, ["Normal window", "Minimized", "Maximized"], (int)_item.Run);
+        Row(L.T("Run"));
+        _ui.Combo(ex, y, 278, IdRun, [L.T("Normal window"), L.T("Minimized"), L.T("Maximized")], (int)_item.Run);
         y += 31;
-        Row("Open running");
-        _ui.Combo(ex, y, 278, IdOpenRunning, ["Use global setting", "Switch to it", "Start another copy"], (int)_item.OpenRunning);
+        Row(L.T("Open running"));
+        _ui.Combo(ex, y, 278, IdOpenRunning, [L.T("Use global setting"), L.T("Switch to it"), L.T("Start another copy")], (int)_item.OpenRunning);
         y += 33;
-        _ui.Check("Run as administrator", ex, y, 278, IdAdmin, _item.RunAsAdmin);
+        _ui.Check(L.T("Run as administrator"), ex, y, 278, IdAdmin, _item.RunAsAdmin);
     }
 
     // ------------------------------------------------------------ library
@@ -180,7 +180,7 @@ public sealed unsafe class IconSettingsDialog : WindowBase
             catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         }
         Directory.CreateDirectory(_app.Store.Location.IconsFolder);
-        AddRoot("NETDock icons", _app.Store.Location.IconsFolder, false);
+        AddRoot(L.T("NETDock icons"), _app.Store.Location.IconsFolder, false);
         if (RocketDockConfig.Folder() is { } rd) AddRoot("RocketDock icons", Path.Combine(rd, "Icons"), false);
         foreach (var f in _app.Settings.IconFolders)
             if (_app.Tokens.Expand(f) is { } path) AddRoot(Path.GetFileName(path.TrimEnd('\\')) is { Length: > 0 } n ? n : path, path, true);
@@ -367,12 +367,12 @@ public sealed unsafe class IconSettingsDialog : WindowBase
                         UpdatePreview();
                         return 0;
                     case IdBrowseIcon:
-                        if (Dialogs.PickFile(Hwnd, "Choose an icon", "Icons and images\0*.png;*.ico;*.jpg;*.jpeg;*.bmp;*.exe;*.dll\0All files\0*.*\0",
+                        if (Dialogs.PickFile(Hwnd, L.T("Choose an icon"), "Icons and images\0*.png;*.ico;*.jpg;*.jpeg;*.bmp;*.exe;*.dll\0All files\0*.*\0",
                                 initial: _pendingIcon ?? (_selectedFolder >= 0 && _selectedFolder < _folders.Count ? _folders[_selectedFolder].Path : null)) is { } f)
                         { _iconChanged = true; _pendingIcon = f; UpdatePreview(); }
                         return 0;
                     case IdAddFolder:
-                        if (Dialogs.PickFolder(Hwnd, "Add an icon folder") is { } folder)
+                        if (Dialogs.PickFolder(Hwnd, L.T("Add an icon folder")) is { } folder)
                         {
                             var t = _app.Tokens.Tokenize(folder)!;
                             if (!_app.Settings.IconFolders.Contains(t, StringComparer.OrdinalIgnoreCase)) { _app.Settings.IconFolders.Add(t); _app.Save(); }
@@ -391,14 +391,14 @@ public sealed unsafe class IconSettingsDialog : WindowBase
                     case IdBrowseTarget:
                         if (IsStack)
                         {
-                            if (Dialogs.PickFolder(Hwnd, "Folder for this stack", Expanded(IdTarget)) is { } sf) Ui.SetWindowText(Win32.GetDlgItem(Hwnd, IdTarget), _app.Tokens.Tokenize(sf)!);
+                            if (Dialogs.PickFolder(Hwnd, L.T("Folder for this stack"), Expanded(IdTarget)) is { } sf) Ui.SetWindowText(Win32.GetDlgItem(Hwnd, IdTarget), _app.Tokens.Tokenize(sf)!);
                         }
-                        else if (Dialogs.PickFile(Hwnd, "Target", "Programs and shortcuts\0*.exe;*.lnk;*.bat;*.cmd;*.url\0All files\0*.*\0", dereferenceLinks: false, initial: Expanded(IdTarget)) is { } tf)
+                        else if (Dialogs.PickFile(Hwnd, L.T("Target"), "Programs and shortcuts\0*.exe;*.lnk;*.bat;*.cmd;*.url\0All files\0*.*\0", dereferenceLinks: false, initial: Expanded(IdTarget)) is { } tf)
                             Ui.SetWindowText(Win32.GetDlgItem(Hwnd, IdTarget), _app.Tokens.Tokenize(tf)!);
                         return 0;
                     case IdBrowseDir:
                         // Empty Start in means "the program's folder", so start the browser there.
-                        if (Dialogs.PickFolder(Hwnd, "Start in", Expanded(IdDir) ?? Expanded(IdTarget)) is { } d) Ui.SetWindowText(Win32.GetDlgItem(Hwnd, IdDir), _app.Tokens.Tokenize(d)!);
+                        if (Dialogs.PickFolder(Hwnd, L.T("Start in"), Expanded(IdDir) ?? Expanded(IdTarget)) is { } d) Ui.SetWindowText(Win32.GetDlgItem(Hwnd, IdDir), _app.Tokens.Tokenize(d)!);
                         return 0;
                 }
                 break;
