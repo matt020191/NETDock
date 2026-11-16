@@ -13,7 +13,7 @@ public sealed unsafe class IconSettingsDialog : WindowBase
     public static IconSettingsDialog? Current { get; private set; }
 
     private const int IdTree = 300, IdRemoveFolder = 301, IdAddFolder = 302, IdList = 310, IdBrowseIcon = 311, IdPreview = 320,
-        IdDefaultIcon = 330, IdOk = 1, IdCancel = 2,
+        IdDefaultIcon = 330, IdState = 331, IdOk = 1, IdCancel = 2,
         IdName = 400, IdTarget = 401, IdBrowseTarget = 402, IdDir = 403, IdBrowseDir = 404, IdArgs = 405,
         IdRun = 406, IdOpenRunning = 407, IdAdmin = 408, IdView = 409, IdSort = 410, IdDescending = 411, IdFoldersFirst = 412;
 
@@ -27,8 +27,13 @@ public sealed unsafe class IconSettingsDialog : WindowBase
     private List<string> _files = [];
     private readonly Dictionary<int, string> _pendingImages = []; // list index → icon key still loading
 
-    private bool _iconChanged;
-    private string? _pendingIcon; // a file path, or null for the default icon
+    // Per icon state (0 = normal/empty, 1 = full; only the Recycle Bin has a second state).
+    private readonly bool[] _changed = new bool[2];
+    private readonly string?[] _pending = new string?[2]; // a file path, or null for the default icon
+    private int _state;
+    private bool HasStates => RecycleBin.Is(_item);
+    private bool _iconChanged { get => _changed[_state]; set => _changed[_state] = value; }
+    private string? _pendingIcon { get => _pending[_state]; set => _pending[_state] = value; }
 
     private IconSettingsDialog(App app, DockItem item) { _app = app; _item = item; }
 
@@ -84,7 +89,13 @@ public sealed unsafe class IconSettingsDialog : WindowBase
 
         // Preview
         _ui.Group("Preview", 12, 352, 240, 228);
-        _preview = _ui.Add("STATIC", null, Ui.SS_OWNERDRAW, 22, 374, 220, 196, IdPreview);
+        if (HasStates)
+        {
+            // RocketDock's "Icon state" dropdown: the Recycle Bin has an icon for empty and for full.
+            _ui.Combo(22, 374, 220, IdState, ["Empty", "Full (has items)"], 0);
+            _preview = _ui.Add("STATIC", null, Ui.SS_OWNERDRAW, 22, 406, 220, 164, IdPreview);
+        }
+        else _preview = _ui.Add("STATIC", null, Ui.SS_OWNERDRAW, 22, 374, 220, 196, IdPreview);
 
         // Properties
         _ui.Group("Properties", 262, 352, 386, 228);
@@ -253,12 +264,14 @@ public sealed unsafe class IconSettingsDialog : WindowBase
         if (_previewIcon != 0) { Win32.DestroyIcon(_previewIcon); _previewIcon = 0; }
         var px = Math.Min(256, _ui.S(128));
         IconImage? img;
-        if (_iconChanged)
+        var probe = new DockItem
         {
-            var probe = new DockItem { Kind = _item.Kind, Target = _item.Target, Fallback = _item.Fallback, Icon = PendingIconReference(import: false) };
-            img = IconService.ForItem(probe, _app.Store, _app.Tokens, px)();
-        }
-        else img = IconService.ForItem(_item, _app.Store, _app.Tokens, px)();
+            Kind = _item.Kind, Target = _item.Target, Fallback = _item.Fallback,
+            Icon = _changed[0] ? Reference(0, import: false) : _item.Icon,
+            IconFull = _changed[1] ? Reference(1, import: false) : _item.IconFull,
+        };
+        if (HasStates) probe.Icon = RecycleBin.IconFor(probe, full: _state == 1);
+        img = IconService.ForItem(probe, _app.Store, _app.Tokens, px)();
         if (img is not null) _previewIcon = Ui.ToHIcon(img);
         Ui.InvalidateRect(_preview, null, true);
     }
@@ -279,10 +292,9 @@ public sealed unsafe class IconSettingsDialog : WindowBase
     /// The icon reference to store. Images are copied into the data folder (so the dock stays
     /// portable); EXE/DLL icons are referenced in place by tokenized path.
     /// </summary>
-    private string? PendingIconReference(bool import)
+    private string? Reference(int state, bool import)
     {
-        if (_pendingIcon is null) return null;
-        var file = _pendingIcon;
+        if (_pending[state] is not { } file) return null;
         var ext = Path.GetExtension(file).ToLowerInvariant();
         if (ext is ".exe" or ".dll") return _app.Tokens.Tokenize(file) + ",0";
         var icons = Path.GetFullPath(_app.Store.Location.IconsFolder) + Path.DirectorySeparatorChar;
@@ -323,8 +335,17 @@ public sealed unsafe class IconSettingsDialog : WindowBase
             _item.OpenRunning = (OpenRunning)Math.Max(0, ComboValue(IdOpenRunning));
             _item.RunAsAdmin = Checked(IdAdmin);
         }
-        if (_iconChanged) _item.Icon = PendingIconReference(import: true);
+        var oldFull = _item.IconFull;
+        if (_changed[0]) _item.Icon = Reference(0, import: true);
+        if (_changed[1]) _item.IconFull = Reference(1, import: true);
         if ((old.Icon, old.Target) != (_item.Icon, _item.Target)) _app.Dock.ForgetIcon(old);
+        if (HasStates)
+        {
+            // The dock caches the bin by its resolved icon; drop both states' old pictures.
+            var before = new DockItem { Target = _item.Target, Icon = old.Icon, IconFull = oldFull };
+            _app.Dock.ForgetIcon(new DockItem { Target = _item.Target, Icon = RecycleBin.IconFor(before, false) });
+            _app.Dock.ForgetIcon(new DockItem { Target = _item.Target, Icon = RecycleBin.IconFor(before, true) });
+        }
         _app.Save();
         _app.Dock.Relayout();
     }
@@ -341,6 +362,10 @@ public sealed unsafe class IconSettingsDialog : WindowBase
                     case IdOk: Apply(); Win32.DestroyWindow(Hwnd); return 0;
                     case IdCancel: Win32.DestroyWindow(Hwnd); return 0;
                     case IdDefaultIcon: _iconChanged = true; _pendingIcon = null; UpdatePreview(); return 0;
+                    case IdState when (int)((w >> 16) & 0xFFFF) == Ui.CBN_SELCHANGE:
+                        _state = Math.Clamp(ComboValue(IdState), 0, 1);
+                        UpdatePreview();
+                        return 0;
                     case IdBrowseIcon:
                         if (Dialogs.PickFile(Hwnd, "Choose an icon", "Icons and images\0*.png;*.ico;*.jpg;*.jpeg;*.bmp;*.exe;*.dll\0All files\0*.*\0",
                                 initial: _pendingIcon ?? (_selectedFolder >= 0 && _selectedFolder < _folders.Count ? _folders[_selectedFolder].Path : null)) is { } f)
