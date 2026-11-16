@@ -128,6 +128,8 @@ public sealed class DockOptions
     public bool MinimizeToDock { get; set; }
     /// <summary>Hovering a running app shows live thumbnails of its windows.</summary>
     public bool LivePreviews { get; set; } = true;
+    /// <summary>Running programs that aren't pinned appear after a separator, taskbar style.</summary>
+    public bool ShowRunningApps { get; set; }
     public int PreviewDelayMs { get; set; } = 500;
     /// <summary>Repeating animation while one of the app's windows flashes for attention.</summary>
     public IconEffect AttentionEffect { get; set; } = IconEffect.Bounce;

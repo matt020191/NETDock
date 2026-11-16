@@ -24,6 +24,8 @@ public sealed unsafe partial class DockWindow : WindowBase
     private float _scale = 1;
     private RECT _work;
     private int _thickness, _length;
+    /// <summary>Icon size from settings; <c>_base</c> is that or smaller when the row would run off the screen.</summary>
+    private float _baseFull;
     private float _base, _max, _pad, _spacing, _sepSpacing, _shelfV0, _shelfThick, _iconV0, _labelH;
 
     // Panel style: how far the background reaches past the icons (along the row, at the
@@ -68,10 +70,54 @@ public sealed unsafe partial class DockWindow : WindowBase
     private readonly List<(nint Hwnd, DockItem Item)> _minimized = [];
     private static readonly DockItem MinimizedSeparator = new() { Id = "netdock-minimized-separator", Kind = ItemKind.Separator };
 
+    private static readonly DockItem RunningSeparator = new() { Id = "netdock-running-separator", Kind = ItemKind.Separator };
+    /// <summary>Running programs that aren't pinned (when <see cref="DockOptions.ShowRunningApps"/> is on), in order of appearance.</summary>
+    private readonly List<DockItem> _unpinned = [];
+
     private void SyncView()
     {
-        if (_minimized.Count == 0) { if (_view.Count != Pinned.Count || !_view.SequenceEqual(Pinned)) _view = [.. Pinned]; return; }
-        _view = [.. Pinned, MinimizedSeparator, .. _minimized.Select(m => m.Item)];
+        if (_minimized.Count == 0 && _unpinned.Count == 0) { if (_view.Count != Pinned.Count || !_view.SequenceEqual(Pinned)) _view = [.. Pinned]; return; }
+        var v = new List<DockItem>(Pinned);
+        if (_unpinned.Count > 0) { v.Add(RunningSeparator); v.AddRange(_unpinned); }
+        if (_minimized.Count > 0) { v.Add(MinimizedSeparator); v.AddRange(_minimized.Select(m => m.Item)); }
+        _view = v;
+    }
+
+    /// <summary>Is this one of the "running, not pinned" icons?</summary>
+    public bool IsUnpinned(DockItem item) => _unpinned.Contains(item);
+
+    /// <summary>Track running programs with no pinned icon. True when the set changed.</summary>
+    private bool UpdateUnpinned()
+    {
+        var before = _unpinned.Select(i => i.Target).ToList();
+        if (!Opt.ShowRunningApps) { _unpinned.Clear(); return before.Count > 0; }
+        var pinnedExes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in Pinned)
+            if (RunningApps.ExeFor(item, _app.Tokens) is { } exe) pinnedExes.Add(exe);
+        var self = Environment.ProcessPath;
+        var running = _running.Keys.Where(exe => !pinnedExes.Contains(exe) && !RunningApps.IsShellHost(exe)
+            && !string.Equals(exe, self, StringComparison.OrdinalIgnoreCase)).ToList();
+        _unpinned.RemoveAll(i => !running.Contains(i.Target, StringComparer.OrdinalIgnoreCase));
+        foreach (var exe in running)
+            if (!_unpinned.Any(i => string.Equals(i.Target, exe, StringComparison.OrdinalIgnoreCase)))
+                _unpinned.Add(new DockItem { Id = "netdock-running-" + exe.ToLowerInvariant(), Kind = ItemKind.App, Target = exe, Name = RunningApps.DisplayName(exe) });
+        return !before.SequenceEqual(_unpinned.Select(i => i.Target));
+    }
+
+    /// <summary>Pin a running app: a real, saved item at the end of the pinned icons.</summary>
+    public void PinRunning(DockItem item)
+    {
+        if (!IsUnpinned(item)) return;
+        Pinned.Add(new DockItem { Kind = ItemKind.App, Name = item.Name, Target = _app.Tokens.Tokenize(item.Target)! });
+        _app.Save();
+        Relayout();
+    }
+
+    /// <summary>Ask every window of a running app to close.</summary>
+    public void CloseWindowsOf(DockItem item)
+    {
+        if (WindowsFor(item) is { } wins) foreach (var w in wins) Win32.PostMessage(w, Win32.WM_CLOSE, 0, 0);
+        Win32.SetTimer(Hwnd, RunningDebounce, 800, 0);
     }
 
     /// <summary>Track minimised top-level windows. True when the set changed.</summary>
@@ -174,7 +220,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         var mon = Opt.Monitor == MonitorSpan.All ? Monitors.Span(Opt.Edge) : Monitors.Pick(Opt.Monitor);
         _work = mon.Work;
         _scale = mon.Dpi / 96f;
-        _base = Opt.IconSize * _scale;
+        _base = _baseFull = Opt.IconSize * _scale;
         _max = (Opt.Magnify ? Opt.MagnifiedSize : Opt.IconSize) * _scale;
         _pad = 6 * _scale;
         _spacing = Opt.Spacing * _scale;
@@ -221,6 +267,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         Win32.SetWindowPos(Hwnd, InsertAfter, x, y, w, h, Win32.SWP_NOACTIVATE);
         foreach (var b in _bitmaps.Values) { var p = b; Com.Release(ref p); }
         _bitmaps.Clear();
+        UpdateUnpinned();
         UpdateMinimized();
         SyncView();
         _scales = new double[Items.Count];
@@ -383,6 +430,20 @@ public sealed unsafe partial class DockWindow : WindowBase
         var n = Items.Count;
         if (_u0.Length != n) { _u0 = new float[n]; _len = new float[n]; }
         if (_scales.Length != n) { _scales = new double[n]; Array.Fill(_scales, 1.0); }
+
+        // Shrink to fit (RocketDock does too): if the icons at their set size don't fit along the edge,
+        // make them smaller. Zoom still magnifies up to the set zoom size.
+        _base = _baseFull;
+        float natural = 0; var icons = 0;
+        for (var i = 0; i < n; i++)
+        {
+            natural += RestLength(Items[i]) + Gap(i);
+            if (Items[i].Kind != ItemKind.Separator) icons++;
+        }
+        var avail = _length - _pad * 4 - (Panel ? _outStart + _outEnd : _pad * 4);
+        if (icons > 0 && natural > avail)
+            _base = Math.Max(16 * _scale, (avail - (natural - icons * _baseFull)) / icons);
+
         float total = 0;
         for (var i = 0; i < n; i++)
         {
@@ -694,6 +755,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         // An app that closed while flashing stops asking for attention.
         foreach (var (id, exe) in _attention.ToList())
             if (!_running.ContainsKey(exe)) _attention.Remove(id);
+        UpdateUnpinned();
         UpdateMinimized();
         Render();
     }
@@ -896,7 +958,11 @@ public sealed unsafe partial class DockWindow : WindowBase
         POINT p;
         Win32.GetCursorPos(&p);
         // Minimised-window icons aren't saved items; treat them like the empty end of the dock.
-        if (hit >= Pinned.Count) hit = -1;
+        if (hit >= Pinned.Count)
+        {
+            if (Items[hit] is var running && IsUnpinned(running)) { Menus.ShowRunningMenu(_app, this, running, p); return; }
+            hit = -1;
+        }
         Menus.ShowDockMenu(_app, this, hit >= 0 ? Items[hit] : null, hit, p);
     }
 

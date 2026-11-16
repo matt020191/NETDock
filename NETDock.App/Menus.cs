@@ -148,6 +148,7 @@ public static unsafe class Menus
         Add(view2, 83, L.T("Auto-hide"), o.AutoHide);
         Add(view2, 86, L.T("Minimise windows to the dock"), o.MinimizeToDock);
         Add(view2, 87, L.T("Live window previews"), o.LivePreviews);
+        Add(view2, 88, L.T("Show running apps"), o.ShowRunningApps);
         Add(view2, 84, L.T("Lock icons (Ctrl-drag still moves them)"), o.Locked);
         Sep(view2);
         Add(view2, 95, L.T("Start with Windows"), App.StartsWithWindows);
@@ -170,6 +171,26 @@ public static unsafe class Menus
         Win32.PostMessage(dock.Hwnd, 0, 0, 0);
         Win32.DestroyMenu(m); // destroys submenus too
         if (cmd != 0) Run(app, dock, item, index, cmd);
+    }
+
+    /// <summary>Right-click on a running program that isn't pinned.</summary>
+    public static void ShowRunningMenu(App app, DockWindow dock, DockItem item, POINT at)
+    {
+        var m = Win32.CreatePopupMenu();
+        Win32.AppendMenu(m, 0, 1, L.T("Pin to dock"));
+        Win32.AppendMenu(m, 0, 2, L.T("Close window"));
+        Win32.AppendMenu(m, Win32.MF_SEPARATOR, 0, null);
+        Win32.AppendMenu(m, app.Settings.Dock.ShowRunningApps ? Win32.MF_CHECKED : 0, 3, L.T("Show running apps"));
+        Win32.SetForegroundWindow(dock.Hwnd);
+        var cmd = Win32.TrackPopupMenuEx(m, Win32.TPM_RETURNCMD | Win32.TPM_RIGHTBUTTON, at.X, at.Y, dock.Hwnd, 0);
+        Win32.PostMessage(dock.Hwnd, 0, 0, 0);
+        Win32.DestroyMenu(m);
+        switch (cmd)
+        {
+            case 1: dock.PinRunning(item); break;
+            case 2: dock.CloseWindowsOf(item); break;
+            case 3: app.Settings.Dock.ShowRunningApps = false; app.Save(); dock.Relayout(); break;
+        }
     }
 
     /// <summary>Run a dock-level menu command (no item) from elsewhere, e.g. the settings window.</summary>
@@ -276,6 +297,7 @@ public static unsafe class Menus
             case 81: o.Reflections = !o.Reflections; break;
             case 82: o.ShowRunningIndicators = !o.ShowRunningIndicators; break;
             case 83: o.AutoHide = !o.AutoHide; break;
+            case 88: o.ShowRunningApps = !o.ShowRunningApps; break;
             case 87: o.LivePreviews = !o.LivePreviews; if (!o.LivePreviews) app.Preview.Hide(); break;
             case 86: o.MinimizeToDock = !o.MinimizeToDock; dock.RefreshMinimized(); break;
             case 84: o.Locked = !o.Locked; break;

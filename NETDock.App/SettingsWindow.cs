@@ -293,6 +293,7 @@ public sealed unsafe class SettingsWindow : WindowBase
         Combo(ref y, L.T("Attention effect (when an app's window flashes)"), effects, () => (int)Opt.AttentionEffect, v => Opt.AttentionEffect = (IconEffect)v);
         Check(ref y, L.T("Minimise windows to the dock (shown after a separator; click to restore)"), () => Opt.MinimizeToDock, v => Opt.MinimizeToDock = v);
         Check(ref y, L.T("Live window previews when hovering a running app"), () => Opt.LivePreviews, v => Opt.LivePreviews = v);
+        Check(ref y, L.T("Show running apps that aren't pinned (after a separator)"), () => Opt.ShowRunningApps, v => Opt.ShowRunningApps = v);
         Check(ref y, L.T("Auto-hide"), () => Opt.AutoHide, v => Opt.AutoHide = v);
         Slider(ref y, L.T("Auto-hide delay"), 0, 3000, () => Opt.AutoHideDelayMs, v => Opt.AutoHideDelayMs = v, v => $"{v}ms");
         Slider(ref y, L.T("Auto-hide duration"), 0, 1500, () => Opt.AutoHideDurationMs, v => Opt.AutoHideDurationMs = v, v => v == 0 ? L.T("Instant") : $"{v}ms");

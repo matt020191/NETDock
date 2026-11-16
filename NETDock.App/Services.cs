@@ -268,6 +268,23 @@ public static unsafe class RunningApps
         finally { Win32.CloseHandle(h); }
     }
 
+    /// <summary>Processes whose windows belong to other apps or to Windows itself, never shown as running apps.</summary>
+    public static bool IsShellHost(string exe) => Path.GetFileName(exe).ToLowerInvariant() is
+        "applicationframehost.exe" or "textinputhost.exe" or "shellexperiencehost.exe" or "startmenuexperiencehost.exe"
+        or "searchhost.exe" or "lockapp.exe" or "systemsettingsbroker.exe";
+
+    /// <summary>A program's friendly name (its file description), else the file name.</summary>
+    public static string DisplayName(string exe)
+    {
+        try
+        {
+            var d = System.Diagnostics.FileVersionInfo.GetVersionInfo(exe).FileDescription?.Trim();
+            if (!string.IsNullOrEmpty(d)) return d;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException) { }
+        return Path.GetFileNameWithoutExtension(exe);
+    }
+
     /// <summary>Image path of the process that owns a window.</summary>
     public static string? PathOf(nint hwnd)
     {

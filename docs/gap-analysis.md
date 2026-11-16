@@ -43,7 +43,7 @@ Effort is rough: **S** = an hour or two, **M** = a session, **L** = several sess
 | # | Feature | Notes | Effort |
 |---|---------|-------|--------|
 | A | ~~**Live window previews**~~ (done) | Hover a running app to see DWM thumbnails of its windows and click one to switch. Aero Dock's `thumbnails.rs` shows the approach (`DwmRegisterThumbnail`). | M |
-| B | **Running apps not pinned** | Show running programs that aren't on the dock (taskbar-style), optionally after a separator. | M |
+| B | ~~**Running apps not pinned**~~ (done; launcher-started apps like Discord match by exe, so they show twice) | Show running programs that aren't on the dock (taskbar-style), optionally after a separator. | M |
 | C | **Store / UWP apps** | Pin and launch packaged apps (`shell:AppsFolder\AUMID`). Running detection needs `PKEY_AppUserModel_ID`, because these windows are hosted by ApplicationFrameHost. Launching works today; running dots don't. | M |
 | D | **Search overlay** | A key opens a search over installed apps and recent files. | M |
 | E | **Per-app volume** | Scroll an icon to change that app's volume, middle-click to mute. | M |
