@@ -316,7 +316,9 @@ public sealed unsafe partial class App
     public void OfferUpdate()
     {
         if (Updater.Available is not { } r || Updater.Applying) return;
-        var notes = r.Notes.Length > 900 ? r.Notes[..900] + "..." : r.Notes;
+        // Release notes are Markdown; a message box shows plain text, so drop the emphasis and code marks.
+        var plain = r.Notes.Replace("**", "").Replace("__", "").Replace("`", "");
+        var notes = plain.Length > 900 ? plain[..900] + "..." : plain;
         var answer = Win32.MessageBox(Dock.Hwnd,
             L.F("NETDock {0} is available (you have {1}).\n\n{2}\n\nUpdate and restart NETDock now?", r.Version, AppVersion.Text, notes.Trim()),
             "NETDock", Win32.MB_YESNO | Win32.MB_ICONQUESTION);

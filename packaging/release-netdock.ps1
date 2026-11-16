@@ -150,10 +150,13 @@ if ($LASTEXITCODE -ne 0) { throw 'Pushing the tag failed.' }
 # Gitea's push mirror syncs on push (or on its interval); the release needs the commit on GitHub.
 Write-Step 'Waiting for the mirror to reach GitHub'
 $deadline = (Get-Date).AddMinutes(10)
+$reported = $false
 while ($true) {
     try { Invoke-RestMethod -Uri "$api/commits/$sha" -Headers $headers | Out-Null; break }
     catch {
-        if ((Get-Date) -gt $deadline) { throw "Commit $sha is not on GitHub after 10 minutes: check the Gitea push mirror (Settings > Mirror settings > Synchronize now), then re-run the release step." }
+        $why = $_.Exception.Message
+        if (-not $reported) { Write-Ok "Not there yet: $why"; $reported = $true }
+        if ((Get-Date) -gt $deadline) { throw "Commit $sha is not on GitHub after 10 minutes ($why): check the Gitea push mirror (Settings > Mirror settings > Synchronize now), then re-run the release step." }
         Start-Sleep 15
     }
 }
