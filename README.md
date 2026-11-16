@@ -4,6 +4,36 @@
 
 A RocketDock-style dock for Windows. It is a single native .NET 11 AOT executable (about 4 MB) with no runtime, WebView or browser engine. It draws with Direct2D into a per-pixel-alpha layered window.
 
+## Install
+
+1. Download `NETDock.exe` from the [latest release](https://github.com/matt020191/NETDock/releases/latest). It is signed by M-TEC SYSTEMS, INC.
+2. Run it. On first run it offers to install. *Yes* installs it for your user only, with no admin rights needed:
+   - the exe goes to `%LocalAppData%\Programs\NETDock`
+   - it adds a Start menu shortcut and an entry in *Settings → Apps*
+   - settings live in `%APPDATA%\NETDock`
+
+   Choose *No* to just run it where it is.
+3. To start it with Windows, use right-click → *Options → Start with Windows*.
+
+**Portable:** download `NETDock-<version>-portable.zip` instead and extract it anywhere, such as a USB stick. The `portable` marker in the zip keeps all settings in `Data\` next to the exe. A portable copy never offers to install. You can install it later with right-click → *Settings → Install NETDock*, and its icons and settings come with it.
+
+**Uninstall:** use *Settings → Apps → NETDock → Uninstall*, or run `NETDock.exe --uninstall`. This removes the program, the shortcut and the startup entry. It asks whether to keep your icons and settings.
+
+## Updates
+
+NETDock checks GitHub for a new release about once a day. Turn this off with right-click → *Settings → Check for updates automatically*. When an update is found, a tray notification appears. Click it to see the release notes, then:
+- *Yes* installs the update and restarts the dock
+- *No* skips that version
+
+To check by hand, use *Settings → Check for updates now*.
+
+Before an update is installed, the download must:
+- match the release's published SHA-256
+- carry a valid Authenticode signature, with revocation checked
+- be signed by exactly M-TEC SYSTEMS, INC.
+
+If any check fails, nothing is replaced. If the swap itself fails, the previous version is put back.
+
 ## Build
 
 ```
