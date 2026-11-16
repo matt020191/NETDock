@@ -116,7 +116,10 @@ if ($NoPublish) { Write-Step "Done (not published). Assets: $assets"; return }
 # 5. Tag (Gitea -> mirror) and GitHub release
 # ---------------------------------------------------------------------
 if (-not $GitHubToken) {
-    $cred = "protocol=https`nhost=github.com`n`n" | git credential fill
+    # Windows PowerShell mangles text piped into native commands ("missing protocol field"): feed git from a file.
+    $req = Join-Path $out 'credential-request.txt'
+    [IO.File]::WriteAllText($req, "protocol=https`nhost=github.com`n`n")
+    try { $cred = cmd /c "git credential fill < `"$req`"" } finally { Remove-Item $req -ErrorAction SilentlyContinue }
     $GitHubToken = ($cred | Where-Object { $_ -like 'password=*' }) -replace '^password=', ''
 }
 if (-not $GitHubToken) { throw 'No GitHub credentials: set GITHUB_TOKEN.' }
