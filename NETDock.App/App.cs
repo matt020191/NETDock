@@ -28,6 +28,7 @@ public sealed unsafe partial class App
     {
         ExeFolder = AppContext.BaseDirectory.TrimEnd('\\');
         Store = new SettingsStore(DataLocation.Resolve(ExeFolder));
+        Accent.CacheFolder = Path.Combine(Store.Location.Folder, "cache");
         Tokens = PathTokens.ForThisMachine(ExeFolder);
     }
 

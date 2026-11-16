@@ -13,7 +13,8 @@ namespace NETDock.App;
 /// </summary>
 public sealed unsafe partial class DockWindow : WindowBase
 {
-    private const nuint AnimTimer = 1, RunningTimer = 2, RunningDebounce = 3, HideTimer = 4, PopTimer = 5, PreviewTimer = 6, VolumeTimer = 7, TileTimer = 8;
+    private const nuint AnimTimer = 1, RunningTimer = 2, RunningDebounce = 3, HideTimer = 4, PopTimer = 5, PreviewTimer = 6, VolumeTimer = 7, TileTimer = 8, AmbientTimer = 9;
+    private D2DColor? _accent;
     private readonly App _app;
     private LayeredSurface _surface = null!;
     private nint _labelFormat, _shelfBrush;
@@ -32,7 +33,9 @@ public sealed unsafe partial class DockWindow : WindowBase
     // screen-edge side, and on the side away from the edge), in pixels.
     private float _outStart, _outEnd, _outEdge, _outAway;
     private Skin? _skin;
-    private nint _skinBg, _skinSep;
+    private nint _skinBg, _skinSep, _skinTinted;
+    private byte[]? _skinPixels;
+    private D2DColor? _skinTintFor;
     private int _skinBgW, _skinBgH, _skinSepW, _skinSepH, _skinL, _skinR;
     private bool Panel => Opt.Style == DockStyle.Panel;
 
@@ -359,6 +362,8 @@ public sealed unsafe partial class DockWindow : WindowBase
     {
         var mon = Opt.Monitor == MonitorSpan.All ? Monitors.Span(Opt.Edge) : Monitors.Pick(Opt.Monitor);
         _work = mon.Work;
+        _accent = Accent.For(Opt.AccentSync);
+        if (Opt.AmbientGlow) Win32.SetTimer(Hwnd, AmbientTimer, 66, 0); else Win32.KillTimer(Hwnd, AmbientTimer);
         _scale = mon.Dpi / 96f;
         _base = _baseFull = Opt.IconSize * _scale;
         _max = (Opt.Magnify ? Opt.MagnifiedSize : Opt.IconSize) * _scale;
@@ -450,6 +455,8 @@ public sealed unsafe partial class DockWindow : WindowBase
     {
         Com.Release(ref _skinBg);
         Com.Release(ref _skinSep);
+        Com.Release(ref _skinTinted);
+        _skinPixels = null;
         _skin = null;
         if (!Panel || _app.Store.ResolveSkin(_app.Tokens.Expand(Opt.Skin)) is not { } folder) return;
         try
@@ -457,6 +464,7 @@ public sealed unsafe partial class DockWindow : WindowBase
             _skin = Skin.Load(folder, f => File.Exists(f) ? File.ReadAllText(f) : null);
             if (_skin is null) return;
             (_skinBg, _skinBgW, _skinBgH) = LoadImage(_skin.Background, out var bgPixels);
+            _skinPixels = bgPixels;
             if (bgPixels is not null) (_skinL, _, _skinR, _) = Skin.StretchMargins(bgPixels, _skinBgW, _skinBgH, _skin.Left, _skin.Top, _skin.Right, _skin.Bottom);
             if (_skin.Separator is { } sep) (_skinSep, _skinSepW, _skinSepH) = LoadImage(sep);
             if (_skinBg == 0) _skin = null;
@@ -469,6 +477,27 @@ public sealed unsafe partial class DockWindow : WindowBase
             Com.Release(ref _skinSep);
             _skin = null;
         }
+    }
+
+    /// <summary>The skin background, or a copy blended 40 % toward the accent colour (rebuilt when the accent changes).</summary>
+    private nint SkinBitmap()
+    {
+        if (_accent is not { } a || _skinPixels is not { } src) return _skinBg;
+        if (_skinTinted != 0 && _skinTintFor is { } was && was.R == a.R && was.G == a.G && was.B == a.B) return _skinTinted;
+        Com.Release(ref _skinTinted);
+        const float K = 0.4f;
+        var px = new byte[src.Length];
+        for (var i = 0; i + 3 < src.Length; i += 4)
+        {
+            float alpha = src[i + 3];
+            px[i] = (byte)(src[i] * (1 - K) + a.B * alpha * K);       // premultiplied: the accent scales with alpha
+            px[i + 1] = (byte)(src[i + 1] * (1 - K) + a.G * alpha * K);
+            px[i + 2] = (byte)(src[i + 2] * (1 - K) + a.R * alpha * K);
+            px[i + 3] = src[i + 3];
+        }
+        _skinTinted = _surface.CreateBitmap(px, _skinBgW, _skinBgH);
+        _skinTintFor = a;
+        return _skinTinted != 0 ? _skinTinted : _skinBg;
     }
 
     /// <summary>A skin image at its native size (the Shell thumbnailer decodes the PNG).</summary>
@@ -515,20 +544,22 @@ public sealed unsafe partial class DockWindow : WindowBase
         var r = ToWindow(rowStart - _outStart, rowEnd + _outEnd, _shelfV0 - off, _iconV0 + _base + _outAway - off);
         if (_skin is { } k && _skinBg != 0)
         {
+            var bg = SkinBitmap();
             // Skins are drawn for a bottom dock; like RocketDock, mirror them on the top edge
             // so the lit side still faces away from the screen edge.
             if (Opt.Edge == DockEdge.Top)
             {
                 _surface.SetTransform(D2DMatrix.FlipY((r.T + r.B) / 2));
-                NineSlice(_skinBg, _skinBgW, _skinBgH, r, _skinL, k.Top, _skinR, k.Bottom);
+                NineSlice(bg, _skinBgW, _skinBgH, r, _skinL, k.Top, _skinR, k.Bottom);
                 _surface.SetTransform(D2DMatrix.Identity);
             }
-            else NineSlice(_skinBg, _skinBgW, _skinBgH, r, _skinL, k.Top, _skinR, k.Bottom);
+            else NineSlice(bg, _skinBgW, _skinBgH, r, _skinL, k.Top, _skinR, k.Bottom);
             return r;
         }
         // Built-in: dark smoked glass, lighter at the top, thin light rim (close to CrystalXP).
         var radius = 7 * _scale;
         _surface.FillRoundRect(r, radius, Bg(new D2DColor(0.09f, 0.1f, 0.12f, 0.82f)));
+        if (_accent is { } accent) _surface.FillRoundRect(r, radius, Bg(accent.WithAlpha(0.38f)));
         LayeredSurface.SetGradientLine(_shelfBrush, new D2DPoint(r.L, r.T), new D2DPoint(r.L, r.B));
         LayeredSurface.SetBrushOpacity(_shelfBrush, BgA);
         _surface.FillRoundRect(r, radius, default, _shelfBrush, setColor: false);
@@ -536,6 +567,20 @@ public sealed unsafe partial class DockWindow : WindowBase
         var inner = new D2DRect(r.L + 1.5f * _scale, r.T + 1.5f * _scale, r.R - 1.5f * _scale, r.B - 1.5f * _scale);
         _surface.DrawRoundRect(inner, radius - 1, Bg(new D2DColor(0, 0, 0, 0.35f)), 1 * _scale);
         return r;
+    }
+
+    /// <summary>Ambient glow: soft rings around the dock in the accent colour, breathing over four seconds.</summary>
+    private void DrawGlow(D2DRect r)
+    {
+        var c = _accent ?? new D2DColor(0.45f, 0.75f, 1f, 1);
+        var pulse = 0.6f + 0.4f * MathF.Sin(Environment.TickCount64 % 4000 / 4000f * MathF.Tau);
+        const int Rings = 7;
+        for (var k = Rings; k >= 1; k--)
+        {
+            var grow = k * 2.2f * _scale;
+            var ring = new D2DRect(r.L - grow, r.T - grow, r.R + grow, r.B + grow);
+            _surface.FillRoundRect(ring, 8 * _scale + grow, c.WithAlpha(0.07f * pulse * (1 - (k - 1f) / Rings)));
+        }
     }
 
     /// <summary>Target scales for the current cursor, worked out on the un-magnified row.</summary>
@@ -633,6 +678,9 @@ public sealed unsafe partial class DockWindow : WindowBase
         else
             s.FillRect(ToWindow(rowStart - _pad * 2, rowEnd + _pad * 2, 0, _iconV0 + maxLen + _pad - off), catcher);
 
+        if (Opt.AmbientGlow)
+            DrawGlow(Panel ? ToWindow(rowStart - _outStart, rowEnd + _outEnd, _shelfV0 - off, _iconV0 + _base + _outAway - off)
+                : ToWindow(rowStart - _pad * 2, rowEnd + _pad * 2, _shelfV0 - off, _shelfV0 + _shelfThick - off));
         if (Panel) DrawPanel(rowStart, rowEnd, off);
         else
         {
@@ -641,6 +689,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         var shelf = ToWindow(rowStart - _pad * 2, rowEnd + _pad * 2, _shelfV0 - off, _shelfV0 + _shelfThick - off);
         var radius = 8 * _scale;
         s.FillRoundRect(shelf, radius, Bg(shelfC));
+        if (_accent is { } accent) s.FillRoundRect(shelf, radius, Bg(accent.WithAlpha(0.38f)));
         var gradTop = Opt.Edge switch { DockEdge.Bottom => new D2DPoint(0, shelf.T), DockEdge.Top => new D2DPoint(0, shelf.B), DockEdge.Left => new D2DPoint(shelf.R, 0), _ => new D2DPoint(shelf.L, 0) };
         var gradBot = Opt.Edge switch { DockEdge.Bottom => new D2DPoint(0, shelf.B), DockEdge.Top => new D2DPoint(0, shelf.T), DockEdge.Left => new D2DPoint(shelf.L, 0), _ => new D2DPoint(shelf.R, 0) };
         LayeredSurface.SetGradientLine(_shelfBrush, gradTop, gradBot);
@@ -651,6 +700,7 @@ public sealed unsafe partial class DockWindow : WindowBase
 
         var now = Environment.TickCount64;
         var indicator = D2DColor.Parse(Opt.IndicatorColor, 0xFFBFE4FF);
+        if (_accent is { } ac) indicator = new D2DColor(ac.R + (1 - ac.R) * 0.55f, ac.G + (1 - ac.G) * 0.55f, ac.B + (1 - ac.B) * 0.55f, 1);
         for (var i = 0; i < n; i++)
         {
             var item = Items[i];
@@ -1236,6 +1286,9 @@ public sealed unsafe partial class DockWindow : WindowBase
                     case RunningTimer: RefreshRunning(); break;
                     case RunningDebounce: Win32.KillTimer(Hwnd, RunningDebounce); RefreshRunning(); break;
                     case PopTimer: PollPopUp(); break;
+                    case AmbientTimer:
+                        if (_hide < 0.99) Render();
+                        break;
                     case TileTimer:
                         if (SystemStatus.Refresh()) Render();
                         break;
@@ -1271,6 +1324,10 @@ public sealed unsafe partial class DockWindow : WindowBase
                 return 0;
             case Win32.WM_SETTINGCHANGE:
                 if (w == 0x2F /* SPI_SETWORKAREA */) Relayout();
+                else if (w == 0x14 /* SPI_SETDESKWALLPAPER */ && Opt.AccentSync != AccentSource.None) { Accent.Invalidate(); _accent = Accent.For(Opt.AccentSync); Render(); }
+                return 0;
+            case 0x320: // WM_DWMCOLORIZATIONCOLORCHANGED: the Windows accent changed
+                if (Opt.AccentSync != AccentSource.None) { _accent = Accent.For(Opt.AccentSync); Render(); }
                 return 0;
             case Win32.WM_DESTROY:
                 _app.Icons.RemoveListener(Hwnd);

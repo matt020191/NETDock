@@ -261,6 +261,8 @@ public sealed unsafe class SettingsWindow : WindowBase
         Slider(ref y, L.T("Panel padding (above and below icons)"), 0, 16, () => Opt.PanelPadding, v => Opt.PanelPadding = v, v => $"{v}px");
         Check(ref y, L.T("Show running indicators"), () => Opt.ShowRunningIndicators, v => Opt.ShowRunningIndicators = v);
         Check(ref y, L.T("Reflections (platform shelf)"), () => Opt.Reflections, v => Opt.Reflections = v);
+        Combo(ref y, L.T("Accent colour"), [L.T("Off"), L.T("Windows accent colour"), L.T("Match the wallpaper")], () => (int)Opt.AccentSync, v => Opt.AccentSync = (AccentSource)v);
+        Check(ref y, L.T("Ambient glow around the dock"), () => Opt.AmbientGlow, v => Opt.AmbientGlow = v);
     }
 
     private void BuildLabels()

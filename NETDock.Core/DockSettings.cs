@@ -172,6 +172,10 @@ public sealed class DockOptions
     /// <summary>Rounded pill behind the label; alpha 0 = none.</summary>
     public string LabelBackgroundColor { get; set; } = "#C70D1219";
     public string IndicatorColor { get; set; } = "#FFBFE4FF";
+    /// <summary>Tint the panel/shelf and running indicators with the Windows accent or the wallpaper's main colour.</summary>
+    public AccentSource AccentSync { get; set; }
+    /// <summary>A slow, soft glow breathing around the dock (redraws ~15 times a second while shown).</summary>
+    public bool AmbientGlow { get; set; }
 }
 
 public sealed class DockSettings

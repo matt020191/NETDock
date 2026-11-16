@@ -538,4 +538,25 @@ public class VolumeStepTests
         var pairs = ModeSwitcher.Match(saved, live);
         Assert.Equal([(20, 2), (10, 1)], pairs.Select(p => (p.Layout.Left, p.Window)));
     }
+
+    private static byte[] Pixels(params (byte R, byte G, byte B, int Count)[] runs)
+    {
+        var list = new List<byte>();
+        foreach (var (r, g, b, n) in runs) for (var i = 0; i < n; i++) list.AddRange([b, g, r, 255]);
+        return [.. list];
+    }
+
+    [Fact]
+    public void Accent_prefers_the_vivid_colour_over_a_larger_grey_area()
+    {
+        var c = AccentColor.Dominant(Pixels((90, 90, 90, 700), (20, 20, 20, 200), (30, 120, 220, 100)));
+        Assert.Equal(((byte)30, (byte)120, (byte)220), c);
+    }
+
+    [Fact]
+    public void Accent_of_a_grey_picture_is_its_average_and_empty_is_null()
+    {
+        Assert.Equal(((byte)100, (byte)100, (byte)100), AccentColor.Dominant(Pixels((80, 80, 80, 10), (120, 120, 120, 10))));
+        Assert.Null(AccentColor.Dominant([]));
+    }
 }
