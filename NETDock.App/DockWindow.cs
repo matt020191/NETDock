@@ -13,7 +13,7 @@ namespace NETDock.App;
 /// </summary>
 public sealed unsafe partial class DockWindow : WindowBase
 {
-    private const nuint AnimTimer = 1, RunningTimer = 2, RunningDebounce = 3, HideTimer = 4, PopTimer = 5, PreviewTimer = 6, VolumeTimer = 7;
+    private const nuint AnimTimer = 1, RunningTimer = 2, RunningDebounce = 3, HideTimer = 4, PopTimer = 5, PreviewTimer = 6, VolumeTimer = 7, TileTimer = 8;
     private readonly App _app;
     private LayeredSurface _surface = null!;
     private nint _labelFormat, _shelfBrush;
@@ -208,6 +208,12 @@ public sealed unsafe partial class DockWindow : WindowBase
         var notches = _wheelRemainder / 120; // WHEEL_DELTA; high-resolution wheels send smaller steps
         if (notches == 0) return;
         _wheelRemainder -= notches * 120;
+        if (string.Equals(Items[hit].Target, SpecialItems.Volume, StringComparison.OrdinalIgnoreCase))
+        {
+            SystemStatus.SetMasterVolume(VolumeSteps.Step(SystemStatus.MasterVolume, notches));
+            Render(); // the tile and its label show the new level
+            return;
+        }
         using var audio = AudioFor(Items[hit]);
         if (!audio.Any) { ShowVolume(Items[hit], -1, false); return; }
         if (audio.Muted && notches > 0) audio.Muted = false;
@@ -235,6 +241,88 @@ public sealed unsafe partial class DockWindow : WindowBase
     }
 
     private bool VolumeShownFor(int i) => _volumeItem is not null && i >= 0 && i < Items.Count && Items[i].Id == _volumeItem;
+
+    // ---------------------------------------------------------------- system corner tiles
+
+    private readonly Dictionary<(string, int, bool), nint> _tileFormats = [];
+
+    private nint TileFormat(string family, float size, bool bold = true)
+    {
+        var key = (family, (int)MathF.Round(size * 2), bold);
+        if (!_tileFormats.TryGetValue(key, out var f))
+            _tileFormats[key] = f = D2D.CreateTextFormat(family, MathF.Max(4, MathF.Round(size * 2) / 2), bold, centre: true, ellipsis: false);
+        return f;
+    }
+
+    /// <summary>A live tile in place of an icon: rounded dark glass with the reading drawn on it.</summary>
+    private void DrawTile(DockItem item, D2DRect r, float opacity)
+    {
+        var s = _surface;
+        var size = r.R - r.L;
+        var radius = size * 0.22f;
+        s.FillRoundRect(r, radius, new D2DColor(0.10f, 0.11f, 0.13f, 0.86f * opacity));
+        s.DrawRoundRect(r, radius, new D2DColor(1, 1, 1, 0.22f * opacity), MathF.Max(1, _scale));
+        var white = new D2DColor(1, 1, 1, opacity);
+        var dim = new D2DColor(0.75f, 0.78f, 0.82f, opacity);
+        float cx = (r.L + r.R) / 2, cy = (r.T + r.B) / 2;
+        switch (item.Target.ToLowerInvariant())
+        {
+            case SpecialItems.Clock:
+            {
+                var t = SystemStatus.Time;
+                var timeSize = size * (t.Length > 5 ? 0.24f : 0.30f); // "7:42 PM" needs a smaller font than "19:42"
+                s.DrawText(t, TileFormat("Segoe UI", timeSize), new D2DRect(r.L, r.T, r.R, cy + size * 0.10f), white);
+                s.DrawText(SystemStatus.Date, TileFormat("Segoe UI", size * 0.17f, bold: false), new D2DRect(r.L, cy + size * 0.06f, r.R, r.B - size * 0.08f), dim);
+                break;
+            }
+            case SpecialItems.Battery:
+            {
+                // Battery body with a fill, a nub on the right, and the percentage under it.
+                float bw = size * 0.56f, bh = size * 0.28f, bx = cx - bw / 2 - size * 0.03f, by = cy - size * 0.22f;
+                var body = new D2DRect(bx, by, bx + bw, by + bh);
+                s.DrawRoundRect(body, bh * 0.2f, white, MathF.Max(1.2f, size * 0.035f));
+                s.FillRect(new D2DRect(body.R + size * 0.015f, by + bh * 0.3f, body.R + size * 0.06f, by + bh * 0.7f), white);
+                var pct = SystemStatus.HasBattery && SystemStatus.BatteryPercent >= 0 ? SystemStatus.BatteryPercent : 100;
+                var inset = size * 0.05f;
+                var fillColor = !SystemStatus.HasBattery ? dim : SystemStatus.Charging ? new D2DColor(0.35f, 0.85f, 0.45f, opacity)
+                    : pct <= 20 ? new D2DColor(0.95f, 0.35f, 0.3f, opacity) : white;
+                s.FillRect(new D2DRect(body.L + inset, body.T + inset, body.L + inset + (bw - inset * 2) * pct / 100f, body.B - inset), fillColor);
+                var text = !SystemStatus.HasBattery ? L.T("AC") : (SystemStatus.Charging ? "⚡" : "") + pct + "%";
+                s.DrawText(text, TileFormat("Segoe UI", size * 0.2f), new D2DRect(r.L, cy + size * 0.06f, r.R, r.B - size * 0.08f), white);
+                break;
+            }
+            case SpecialItems.Network:
+            {
+                // Four rising bars; dimmed with a cross when there is no internet.
+                var online = SystemStatus.Online;
+                float barW = size * 0.09f, gap = size * 0.05f, baseY = cy + size * 0.22f, left = cx - (barW * 4 + gap * 3) / 2;
+                for (var b = 0; b < 4; b++)
+                {
+                    var h = size * (0.14f + b * 0.11f);
+                    var x0 = left + b * (barW + gap);
+                    s.FillRect(new D2DRect(x0, baseY - h, x0 + barW, baseY), online ? white : new D2DColor(0.6f, 0.62f, 0.66f, 0.6f * opacity));
+                }
+                if (!online)
+                {
+                    var red = new D2DColor(0.95f, 0.35f, 0.3f, opacity);
+                    float k = size * 0.12f, ox = cx + size * 0.2f, oy = cy - size * 0.18f;
+                    s.DrawLine(new D2DPoint(ox - k, oy - k), new D2DPoint(ox + k, oy + k), red, MathF.Max(1.5f, size * 0.05f));
+                    s.DrawLine(new D2DPoint(ox - k, oy + k), new D2DPoint(ox + k, oy - k), red, MathF.Max(1.5f, size * 0.05f));
+                }
+                break;
+            }
+            case SpecialItems.Volume:
+            {
+                // Segoe Fluent speaker glyph (Volume / Mute) with the level under it.
+                var glyph = SystemStatus.MasterMuted ? "\uE74F" : "\uE767";
+                s.DrawText(glyph, TileFormat("Segoe Fluent Icons", size * 0.36f, bold: false), new D2DRect(r.L, r.T + size * 0.06f, r.R, cy + size * 0.12f), white);
+                var level = (int)MathF.Round(SystemStatus.MasterVolume * 100);
+                s.DrawText(SystemStatus.MasterMuted ? L.T("Muted") : level + "%", TileFormat("Segoe UI", size * 0.2f),
+                    new D2DRect(r.L, cy + size * 0.06f, r.R, r.B - size * 0.08f), SystemStatus.MasterMuted ? dim : white);
+                break;
+            }
+        }
+    }
 
     /// <summary>Re-read minimised windows now (after the option changes).</summary>
     public void RefreshMinimized() => RefreshRunning();
@@ -322,6 +410,9 @@ public sealed unsafe partial class DockWindow : WindowBase
         UpdateUnpinned();
         UpdateMinimized();
         SyncView();
+        // System tiles refresh once a second (only while one is on the dock).
+        if (Pinned.Any(SpecialItems.IsTile)) { SystemStatus.Refresh(); Win32.SetTimer(Hwnd, TileTimer, 1000, 0); }
+        else Win32.KillTimer(Hwnd, TileTimer);
         _scales = new double[Items.Count];
         Array.Fill(_scales, 1.0);
         Render();
@@ -586,6 +677,13 @@ public sealed unsafe partial class DockWindow : WindowBase
             var fxLen = (float)(_len[i] * fx.Scale);
             var fxU0 = _u0[i] + (_len[i] - fxLen) / 2 + (float)(fx.Shift * _base);
             var rect = ToWindow(fxU0, fxU0 + fxLen, v0, v0 + fxLen);
+            if (SpecialItems.IsTile(item))
+            {
+                var tileOpacity = Opt.IconOpacity / 100f;
+                if (Opt.ZoomOpaque && _scales[i] > 1.02) tileOpacity += (1 - tileOpacity) * (float)Math.Min(1, (_scales[i] - 1) / 0.25);
+                DrawTile(item, rect, tileOpacity * (float)fx.Alpha);
+                continue;
+            }
             var bmp = Bitmap(item);
             if (bmp == 0)
             {
@@ -637,7 +735,8 @@ public sealed unsafe partial class DockWindow : WindowBase
     private void DrawLabel(int i, float off)
     {
         var volume = VolumeShownFor(i);
-        var text = !volume ? Items[i].Name
+        var text = SpecialItems.IsTile(Items[i]) ? SystemStatus.LabelFor(Items[i].Target.ToLowerInvariant())
+            : !volume ? Items[i].Name
             : _volumeLevel < 0 ? L.T("No sound playing")
             : _volumeMuted ? L.F("Muted ({0}%)", (int)MathF.Round(_volumeLevel * 100))
             : L.F("Volume {0}%", (int)MathF.Round(_volumeLevel * 100));
@@ -857,6 +956,16 @@ public sealed unsafe partial class DockWindow : WindowBase
             case ItemKind.App when item.Target == SpecialItems.Window:
                 if (_minimized.FirstOrDefault(m => m.Item == item) is { Hwnd: not 0 } win) RunningApps.Activate(win.Hwnd);
                 Win32.SetTimer(Hwnd, RunningDebounce, 300, 0);
+                return;
+            case ItemKind.App when SpecialItems.IsTile(item):
+                StartEffect(item, Opt.ClickEffect);
+                switch (item.Target.ToLowerInvariant())
+                {
+                    case SpecialItems.Clock: Launcher.Open("ms-clock:"); break;
+                    case SpecialItems.Battery: Launcher.Open("ms-settings:batterysaver"); break;
+                    case SpecialItems.Network: Launcher.Open("ms-settings:network-status"); break;
+                    case SpecialItems.Volume: SystemStatus.ToggleMasterMute(); Render(); break;
+                }
                 return;
             case ItemKind.App when SpecialItems.Is(item):
                 StartEffect(item, Opt.ClickEffect);
@@ -1127,6 +1236,9 @@ public sealed unsafe partial class DockWindow : WindowBase
                     case RunningTimer: RefreshRunning(); break;
                     case RunningDebounce: Win32.KillTimer(Hwnd, RunningDebounce); RefreshRunning(); break;
                     case PopTimer: PollPopUp(); break;
+                    case TileTimer:
+                        if (SystemStatus.Refresh()) Render();
+                        break;
                     case VolumeTimer:
                         Win32.KillTimer(Hwnd, VolumeTimer);
                         _volumeItem = null;

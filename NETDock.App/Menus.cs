@@ -104,6 +104,12 @@ public static unsafe class Menus
         Add(add, 43, L.T("Dock Settings icon"));
         Add(add, 44, L.T("Quit icon"));
         Add(add, 45, L.T("Search icon"));
+        Sep(add);
+        Add(add, 46, L.T("System corner (clock, battery, network, volume)"));
+        Add(add, 47, L.T("Clock"));
+        Add(add, 48, L.T("Battery"));
+        Add(add, 49, L.T("Network"));
+        Add(add, 50, L.T("Volume"));
 
         var edge = Sub(L.T("Position"));
         Add(edge, 50, L.T("Bottom"), o.Edge == DockEdge.Bottom);
@@ -270,6 +276,14 @@ public static unsafe class Menus
             case 17: RecycleBinService.Empty(dock.Hwnd); return;
             case 18 when item is not null: dock.ToggleMute(item); return;
             case 43: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Settings)); break;
+            case 46:
+                // Aero Dock's system corner: after a separator at the end of the dock.
+                app.Settings.Items.Add(new DockItem { Kind = ItemKind.Separator });
+                foreach (var t in SpecialItems.SystemCorner) app.Settings.Items.Add(SpecialItems.Create(t));
+                break;
+            case >= 47 and <= 50:
+                app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.SystemCorner[cmd - 47]));
+                break;
             case 45: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Search)); break;
             case 44: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Quit)); break;
             case 40: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), new DockItem { Kind = ItemKind.Separator }); break;
