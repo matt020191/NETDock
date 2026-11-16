@@ -15,6 +15,7 @@ public sealed unsafe partial class App
     public IconService Icons { get; } = new();
     public DockWindow Dock { get; private set; } = null!;
     public StackFlyout Stack { get; private set; } = null!;
+    public PreviewPopup Preview { get; private set; } = null!;
     public string ExeFolder { get; }
 
     private App()
@@ -74,6 +75,7 @@ public sealed unsafe partial class App
 
         Dock = new DockWindow(this);
         Stack = new StackFlyout(this);
+        Preview = new PreviewPopup(this);
         Dock.Show();
         AddTray();
         if (summary is not null) Win32.MessageBox(Dock.Hwnd, summary, "NETDock", Win32.MB_OK | Win32.MB_ICONINFORMATION);

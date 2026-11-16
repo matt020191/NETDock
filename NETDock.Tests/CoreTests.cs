@@ -371,3 +371,14 @@ public class LanguageTests
         Assert.True(keys.Count > 150);
     }
 }
+
+public class PreviewLayoutTests
+{
+    [Fact]
+    public void Fit_keeps_shape_and_never_upscales()
+    {
+        Assert.Equal((200, 112), PreviewLayout.Fit(1920, 1080, 200, 124));
+        Assert.Equal((62, 124), PreviewLayout.Fit(500, 1000, 200, 124));
+        Assert.Equal((100, 50), PreviewLayout.Fit(100, 50, 200, 124));
+    }
+}

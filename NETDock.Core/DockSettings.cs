@@ -126,6 +126,9 @@ public sealed class DockOptions
     public IconEffect ClickEffect { get; set; } = IconEffect.Bounce;
     /// <summary>Minimised windows appear as icons at the end of the dock; clicking one restores it.</summary>
     public bool MinimizeToDock { get; set; }
+    /// <summary>Hovering a running app shows live thumbnails of its windows.</summary>
+    public bool LivePreviews { get; set; } = true;
+    public int PreviewDelayMs { get; set; } = 500;
     /// <summary>Repeating animation while one of the app's windows flashes for attention.</summary>
     public IconEffect AttentionEffect { get; set; } = IconEffect.Bounce;
     /// <summary>Magnified icons are drawn fully opaque whatever <see cref="IconOpacity"/> says.</summary>
@@ -198,6 +201,7 @@ public sealed class DockSettings
         d.AutoHideDelayMs = Math.Clamp(d.AutoHideDelayMs, 0, 10_000);
         d.PopUpDelayMs = Math.Clamp(d.PopUpDelayMs, 0, 5_000);
         d.AutoHideDurationMs = Math.Clamp(d.AutoHideDurationMs, 0, 3_000);
+        d.PreviewDelayMs = Math.Clamp(d.PreviewDelayMs, 0, 3_000);
         d.LabelSize = Math.Clamp(d.LabelSize, 8, 32);
         if (string.IsNullOrWhiteSpace(d.LabelFont) || d.LabelFont.Length > 64) d.LabelFont = "Segoe UI";
         d.Monitor = Math.Max(MonitorSpan.All, d.Monitor);

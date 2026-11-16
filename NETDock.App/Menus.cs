@@ -147,6 +147,7 @@ public static unsafe class Menus
         Add(view2, 85, L.T("Clicking a running app switches to it"), o.ActivateIfRunning);
         Add(view2, 83, L.T("Auto-hide"), o.AutoHide);
         Add(view2, 86, L.T("Minimise windows to the dock"), o.MinimizeToDock);
+        Add(view2, 87, L.T("Live window previews"), o.LivePreviews);
         Add(view2, 84, L.T("Lock icons (Ctrl-drag still moves them)"), o.Locked);
         Sep(view2);
         Add(view2, 95, L.T("Start with Windows"), App.StartsWithWindows);
@@ -275,6 +276,7 @@ public static unsafe class Menus
             case 81: o.Reflections = !o.Reflections; break;
             case 82: o.ShowRunningIndicators = !o.ShowRunningIndicators; break;
             case 83: o.AutoHide = !o.AutoHide; break;
+            case 87: o.LivePreviews = !o.LivePreviews; if (!o.LivePreviews) app.Preview.Hide(); break;
             case 86: o.MinimizeToDock = !o.MinimizeToDock; dock.RefreshMinimized(); break;
             case 84: o.Locked = !o.Locked; break;
             case 85: o.ActivateIfRunning = !o.ActivateIfRunning; break;

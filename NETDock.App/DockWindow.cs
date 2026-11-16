@@ -13,7 +13,7 @@ namespace NETDock.App;
 /// </summary>
 public sealed unsafe partial class DockWindow : WindowBase
 {
-    private const nuint AnimTimer = 1, RunningTimer = 2, RunningDebounce = 3, HideTimer = 4, PopTimer = 5;
+    private const nuint AnimTimer = 1, RunningTimer = 2, RunningDebounce = 3, HideTimer = 4, PopTimer = 5, PreviewTimer = 6;
     private readonly App _app;
     private LayeredSurface _surface = null!;
     private nint _labelFormat, _shelfBrush;
@@ -99,6 +99,44 @@ public sealed unsafe partial class DockWindow : WindowBase
         // Refresh titles of the ones we already had (a minimised player may change its title).
         for (var i = 0; i < _minimized.Count; i++) _minimized[i].Item.Name = WindowTitle(_minimized[i].Hwnd) is { Length: > 0 } t ? (t.Length > 60 ? t[..57] + "..." : t) : _minimized[i].Item.Name;
         return !before.SequenceEqual(_minimized.Select(m => m.Hwnd));
+    }
+
+    // ---------------------------------------------------------------- live previews
+
+    private int _previewHover = -1;
+
+    /// <summary>
+    /// Hovering a running app opens its window previews after a short delay; once they're open, moving to
+    /// another running app swaps them straight away, like the taskbar.
+    /// </summary>
+    private void OnHoverChanged()
+    {
+        _previewHover = _hover;
+        Win32.KillTimer(Hwnd, PreviewTimer);
+        if (!Opt.LivePreviews || _hover < 0 || _dragging >= 0 || _app.StackOpen) return;
+        if (_app.Preview.Item is not null) { ShowPreview(_hover); return; }
+        if (WindowsFor(Items[_hover]) is { Count: > 0 })
+            Win32.SetTimer(Hwnd, PreviewTimer, (uint)Math.Max(1, Opt.PreviewDelayMs), 0);
+    }
+
+    private void ShowPreview(int index)
+    {
+        if (index < 0 || index >= Items.Count || _dragging >= 0 || _app.StackOpen || _userHidden) return;
+        var item = Items[index];
+        if (_app.Preview.Item == item) return;
+        if (WindowsFor(item) is not { Count: > 0 } wins) { _app.Preview.Hide(); return; }
+        // Anchor on the icon at full zoom so the popup clears the magnified icon.
+        var r = IconScreenRect(index);
+        var grow = (int)MathF.Ceiling(_max - _base);
+        r = Opt.Edge switch
+        {
+            DockEdge.Top => new RECT(r.Left, r.Top, r.Right, r.Bottom + grow),
+            DockEdge.Left => new RECT(r.Left, r.Top, r.Right + grow, r.Bottom),
+            DockEdge.Right => new RECT(r.Left - grow, r.Top, r.Right, r.Bottom),
+            _ => new RECT(r.Left, r.Top - grow, r.Right, r.Bottom),
+        };
+        _app.Preview.Show(item, wins, r, Opt.Edge, _scale);
+        Render(); // drop the hover label
     }
 
     /// <summary>Re-read minimised windows now (after the option changes).</summary>
@@ -477,7 +515,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         }
 
         // Label for the hovered icon.
-        if (Opt.ShowLabels && _hover >= 0 && _hover < n && _dragging < 0 && _hide < 0.01 && Items[_hover].Kind != ItemKind.Separator)
+        if (Opt.ShowLabels && _hover >= 0 && _hover < n && _dragging < 0 && _hide < 0.01 && Items[_hover].Kind != ItemKind.Separator && _app.Preview.Item is null)
             DrawLabel(_hover, off);
 
         s.EndAndPresent(Hwnd, _winX, _winY);
@@ -638,6 +676,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         if (_effects.Count > 0 || _dragging >= 0) moving = true;
 
         if (_cursorU is { } cu) _hover = HitTest(cu, _cursorV);
+        if (_hover != _previewHover) OnHoverChanged();
         Render();
         if (!moving)
         {
@@ -684,7 +723,7 @@ public sealed unsafe partial class DockWindow : WindowBase
                 return;
             case ItemKind.Stack:
                 if (item.Stack?.View == StackView.Open) Launcher.Open(_app.Tokens.Expand(item.Target)!);
-                else _app.ToggleStack(item, IconScreenRect(index));
+                else { _app.Preview.Hide(); _app.ToggleStack(item, IconScreenRect(index)); }
                 return;
         }
         var switchTo = item.OpenRunning switch
@@ -903,6 +942,7 @@ public sealed unsafe partial class DockWindow : WindowBase
                 OnMouseLeave();
                 return 0;
             case Win32.WM_LBUTTONDOWN:
+                _app.Preview.Hide();
             {
                 var (u, v) = ToEdge(Win32.LoWord(l), Win32.HiWord(l));
                 _down = HitTest(u, v);
@@ -924,6 +964,7 @@ public sealed unsafe partial class DockWindow : WindowBase
                 if (_dragging >= 0) { _dragging = _down = -1; _app.Save(); Kick(); }
                 return 0;
             case Win32.WM_RBUTTONUP:
+                _app.Preview.Hide();
                 OnRightClick(Win32.LoWord(l), Win32.HiWord(l));
                 return 0;
             case Win32.WM_DROPFILES:
@@ -936,6 +977,10 @@ public sealed unsafe partial class DockWindow : WindowBase
                     case RunningTimer: RefreshRunning(); break;
                     case RunningDebounce: Win32.KillTimer(Hwnd, RunningDebounce); RefreshRunning(); break;
                     case PopTimer: PollPopUp(); break;
+                    case PreviewTimer:
+                        Win32.KillTimer(Hwnd, PreviewTimer);
+                        ShowPreview(_hover);
+                        break;
                     case HideTimer:
                         Win32.KillTimer(Hwnd, HideTimer);
                         if (_cursorU is null && !_app.StackOpen) { _hideWanted = true; Kick(); }
@@ -1047,6 +1092,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         if (_userHidden)
         {
             _app.Stack.Close();
+            _app.Preview.Hide();
             Win32.ShowWindow(Hwnd, Win32.SW_HIDE);
         }
         else
