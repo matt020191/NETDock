@@ -6,6 +6,8 @@ public static class SpecialItems
     public const string Settings = "netdock:settings";
     public const string Quit = "netdock:quit";
     public const string Prefix = "netdock:";
+    /// <summary>A minimised window shown on the dock (never saved).</summary>
+    public const string Window = "netdock:window";
 
     public const string SettingsIcon = @"%SystemRoot%\System32\shell32.dll,-16826";
     public const string QuitIcon = @"%SystemRoot%\System32\shell32.dll,-28";

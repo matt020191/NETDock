@@ -33,7 +33,7 @@ Effort is rough: **S** = an hour or two, **M** = a session, **L** = several sess
 | 10 | ~~**Icon attention effects**~~ (done) | A choice of click animation (bounce, zoom, pulse, ...). Also used when a minimised window flashes for attention. | M | Low |
 | 11 | ~~**Icon state dropdown**~~ (done) | Icon Settings can pick the *full* Recycle Bin icon. The model has `IconFull` and import fills it, but the dialog can't edit it yet. | S | Medium |
 | 12 | ~~**Special items**~~ (done) | *Add item → Dock Settings* and *Quit* icons. | S | Low |
-| 13 | **Minimise windows to the dock** | Minimised windows become dock icons with live previews. A big feature that RocketDock was often unstable with. | L | Optional |
+| 13 | ~~**Minimise windows to the dock**~~ (done, without live previews) | Minimised windows become dock icons with live previews. A big feature that RocketDock was often unstable with. | L | Optional |
 | 14 | **"Monitor \*" (span all)** | Treats all monitors as one long edge. | M | Low |
 | 15 | **Docklets** | RocketClock and ObjectDock docklets. These are 32-bit native DLLs, so a 64-bit dock can't load them; individual docklets would need rebuilding natively. | L | Low |
 | 16 | Languages | Around 50 translations. | M | Low |

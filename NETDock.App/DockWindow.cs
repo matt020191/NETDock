@@ -60,7 +60,56 @@ public sealed unsafe partial class DockWindow : WindowBase
     public DockWindow(App app) => _app = app;
 
     private DockOptions Opt => _app.Settings.Dock;
-    private List<DockItem> Items => _app.Settings.Items;
+    /// <summary>The saved items. All edits (reorder, insert, remove) go here.</summary>
+    private List<DockItem> Pinned => _app.Settings.Items;
+    /// <summary>What's on the dock: the saved items, then minimised windows after a separator.</summary>
+    private List<DockItem> Items => _view;
+    private List<DockItem> _view = [];
+    private readonly List<(nint Hwnd, DockItem Item)> _minimized = [];
+    private static readonly DockItem MinimizedSeparator = new() { Id = "netdock-minimized-separator", Kind = ItemKind.Separator };
+
+    private void SyncView()
+    {
+        if (_minimized.Count == 0) { if (_view.Count != Pinned.Count || !_view.SequenceEqual(Pinned)) _view = [.. Pinned]; return; }
+        _view = [.. Pinned, MinimizedSeparator, .. _minimized.Select(m => m.Item)];
+    }
+
+    /// <summary>Track minimised top-level windows. True when the set changed.</summary>
+    private bool UpdateMinimized()
+    {
+        var now = new List<nint>();
+        if (Opt.MinimizeToDock)
+            foreach (var wins in _running.Values)
+                foreach (var h in wins)
+                    if (Win32.IsIconic(h)) now.Add(h);
+        var before = _minimized.Select(m => m.Hwnd).ToList();
+        _minimized.RemoveAll(m => !now.Contains(m.Hwnd));
+        foreach (var h in now)
+        {
+            if (_minimized.Any(m => m.Hwnd == h)) continue;
+            var title = WindowTitle(h);
+            var exe = RunningApps.PathOf(h);
+            _minimized.Add((h, new DockItem
+            {
+                Id = "netdock-window-" + h, Kind = ItemKind.App, Target = SpecialItems.Window,
+                Name = title.Length > 60 ? title[..57] + "..." : title,
+                Icon = exe is null ? null : exe + ",0",
+            }));
+        }
+        // Refresh titles of the ones we already had (a minimised player may change its title).
+        for (var i = 0; i < _minimized.Count; i++) _minimized[i].Item.Name = WindowTitle(_minimized[i].Hwnd) is { Length: > 0 } t ? (t.Length > 60 ? t[..57] + "..." : t) : _minimized[i].Item.Name;
+        return !before.SequenceEqual(_minimized.Select(m => m.Hwnd));
+    }
+
+    /// <summary>Re-read minimised windows now (after the option changes).</summary>
+    public void RefreshMinimized() => RefreshRunning();
+
+    private static string WindowTitle(nint h)
+    {
+        var buf = stackalloc char[256];
+        var len = Win32.GetWindowText(h, buf, 256);
+        return new string(buf, 0, Math.Max(0, len));
+    }
 
     public void Show()
     {
@@ -134,6 +183,8 @@ public sealed unsafe partial class DockWindow : WindowBase
         Win32.SetWindowPos(Hwnd, InsertAfter, x, y, w, h, Win32.SWP_NOACTIVATE);
         foreach (var b in _bitmaps.Values) { var p = b; Com.Release(ref p); }
         _bitmaps.Clear();
+        UpdateMinimized();
+        SyncView();
         _scales = new double[Items.Count];
         Array.Fill(_scales, 1.0);
         Render();
@@ -290,6 +341,7 @@ public sealed unsafe partial class DockWindow : WindowBase
 
     private void LayoutRow()
     {
+        SyncView();
         var n = Items.Count;
         if (_u0.Length != n) { _u0 = new float[n]; _len = new float[n]; }
         if (_scales.Length != n) { _scales = new double[n]; Array.Fill(_scales, 1.0); }
@@ -603,6 +655,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         // An app that closed while flashing stops asking for attention.
         foreach (var (id, exe) in _attention.ToList())
             if (!_running.ContainsKey(exe)) _attention.Remove(id);
+        UpdateMinimized();
         Render();
     }
 
@@ -619,6 +672,10 @@ public sealed unsafe partial class DockWindow : WindowBase
         switch (item.Kind)
         {
             case ItemKind.Separator:
+                return;
+            case ItemKind.App when item.Target == SpecialItems.Window:
+                if (_minimized.FirstOrDefault(m => m.Item == item) is { Hwnd: not 0 } win) RunningApps.Activate(win.Hwnd);
+                Win32.SetTimer(Hwnd, RunningDebounce, 300, 0);
                 return;
             case ItemKind.App when SpecialItems.Is(item):
                 StartEffect(item, Opt.ClickEffect);
@@ -670,7 +727,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         Win32.KillTimer(Hwnd, HideTimer);
         if (_hideWanted) { _hideWanted = false; }
 
-        if (_down >= 0 && _dragging < 0 && (!Opt.Locked || Win32.GetKeyState(0x11) < 0)
+        if (_down >= 0 && _down < Pinned.Count && _dragging < 0 && (!Opt.Locked || Win32.GetKeyState(0x11) < 0)
             && (Math.Abs(x - _downPt.X) > 6 * _scale || Math.Abs(y - _downPt.Y) > 6 * _scale))
         {
             _dragging = _down;
@@ -681,11 +738,12 @@ public sealed unsafe partial class DockWindow : WindowBase
             _dragU = u; _dragV = v;
             // Live reorder: move the dragged item to the slot under the cursor.
             var target = InsertIndex(u);
-            if (target != _dragging && target >= 0 && target < Items.Count)
+            if (target != _dragging && target >= 0 && target < Pinned.Count)
             {
-                var it = Items[_dragging];
-                Items.RemoveAt(_dragging);
-                Items.Insert(target, it);
+                var it = Pinned[_dragging];
+                Pinned.RemoveAt(_dragging);
+                Pinned.Insert(target, it);
+                SyncView();
                 _dragging = _down = target;
             }
         }
@@ -716,7 +774,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         if (_dragging >= 0)
         {
             var leaving = _dragUnlocked && (v > _thickness + _base * 0.25f || v < -_base);
-            if (leaving) Items.RemoveAt(_dragging);
+            if (leaving) { Pinned.RemoveAt(_dragging); SyncView(); }
             _dragging = _down = -1;
             _app.Save();
             if (leaving) { _scales = []; }
@@ -776,8 +834,9 @@ public sealed unsafe partial class DockWindow : WindowBase
         int at;
         if (hit >= 0) at = across < 0.5f ? hit : hit + 1;
         else at = Items.Count == 0 ? 0 : Math.Clamp(InsertIndex(u) + (u > _u0[^1] + _len[^1] / 2 ? 1 : 0), 0, Items.Count);
+        at = Math.Min(at, Pinned.Count); // never among the minimised-window icons
         foreach (var path in paths)
-            if (ItemFactory.FromPath(path, _app.Tokens) is { } item) Items.Insert(Math.Min(at++, Items.Count), item);
+            if (ItemFactory.FromPath(path, _app.Tokens) is { } item) Pinned.Insert(Math.Min(at++, Pinned.Count), item);
         _app.Save();
         Relayout();
     }
@@ -797,12 +856,14 @@ public sealed unsafe partial class DockWindow : WindowBase
         var hit = HitTest(u, v);
         POINT p;
         Win32.GetCursorPos(&p);
+        // Minimised-window icons aren't saved items; treat them like the empty end of the dock.
+        if (hit >= Pinned.Count) hit = -1;
         Menus.ShowDockMenu(_app, this, hit >= 0 ? Items[hit] : null, hit, p);
     }
 
     public void InsertItem(int at, DockItem item)
     {
-        Items.Insert(Math.Clamp(at, 0, Items.Count), item);
+        Pinned.Insert(Math.Clamp(at, 0, Pinned.Count), item);
         _app.Save();
         Relayout();
     }
