@@ -46,7 +46,7 @@ Effort is rough: **S** = an hour or two, **M** = a session, **L** = several sess
 | B | ~~**Running apps not pinned**~~ (done) | Show running programs that aren't on the dock (taskbar-style), optionally after a separator. | M |
 | C | ~~**Store / UWP apps**~~ (done: running detection by AppUserModelID; launcher apps like Discord matched too) | Pin and launch packaged apps (`shell:AppsFolder\AUMID`). Running detection needs `PKEY_AppUserModel_ID`, because these windows are hosted by ApplicationFrameHost. Launching works today; running dots don't. | M |
 | D | ~~**Search overlay**~~ (done: Ctrl+Alt+Space; dock items, all Start/Store apps, recent files) | A key opens a search over installed apps and recent files. | M |
-| E | **Per-app volume** | Scroll an icon to change that app's volume, middle-click to mute. | M |
+| E | ~~**Per-app volume**~~ (done: scroll an icon in 5 % steps; Mute in its right-click menu, since middle-click starts another copy) | Scroll an icon to change that app's volume, middle-click to mute. | M |
 | F | **System corner** | Clock, battery, network, volume tiles. | M |
 | G | **Modes** | Switchable sets of pinned apps and window layouts. | L |
 | H | Wallpaper accent sync, ambient effects, desktop widgets | Mostly visual polish. | L |
@@ -54,7 +54,7 @@ Effort is rough: **S** = an hour or two, **M** = a session, **L** = several sess
 ## NETDock's own rough edges
 
 - **Not yet tested with a real mouse:** hover magnification feel, stack flyouts, drag reorder and drag-off removal, the settings windows' controls, and dropping onto the Recycle Bin.
-- **No app icon:** the exe, tray and windows use the generic Windows application icon.
+- ~~**No app icon**~~ (done: the NETDock logo is the exe, tray and window icon, and on the About page).
 - **Light theme only:** the settings windows don't follow dark mode.
 - **Packaging:** no installer or updater, and the exe isn't code-signed, so SmartScreen will warn when it's downloaded. Portable zip is the only distribution so far.
 - **Stack flyouts:** no type-ahead or keyboard navigation, no drag-out of files, and the flyout doesn't open on hover (RocketDock's Stacks docklet didn't either).

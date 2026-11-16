@@ -13,7 +13,8 @@ public sealed unsafe class SettingsWindow : WindowBase
 {
     public static SettingsWindow? Current { get; private set; }
 
-    private const int IdNav = 100, IdOk = 1, IdCancel = 2, IdDefaults = 10;
+    private const int IdNav = 100, IdOk = 1, IdCancel = 2, IdDefaults = 10, IdLogo = 11;
+    private nint _logo;
     // A property, not a field: re-read so a language change shows on the next open.
     private static (string Glyph, string Name)[] Pages =>
     [
@@ -317,6 +318,7 @@ public sealed unsafe class SettingsWindow : WindowBase
         Check(ref y, L.T("Minimise windows to the dock (shown after a separator; click to restore)"), () => Opt.MinimizeToDock, v => Opt.MinimizeToDock = v);
         Check(ref y, L.T("Live window previews when hovering a running app"), () => Opt.LivePreviews, v => Opt.LivePreviews = v);
         Check(ref y, L.T("Show running apps that aren't pinned (after a separator)"), () => Opt.ShowRunningApps, v => Opt.ShowRunningApps = v);
+        Check(ref y, L.T("Scroll over a running app to change its volume"), () => Opt.ScrollVolume, v => Opt.ScrollVolume = v);
         Check(ref y, L.T("Auto-hide"), () => Opt.AutoHide, v => Opt.AutoHide = v);
         Slider(ref y, L.T("Auto-hide delay"), 0, 3000, () => Opt.AutoHideDelayMs, v => Opt.AutoHideDelayMs = v, v => $"{v}ms");
         Slider(ref y, L.T("Auto-hide duration"), 0, 1500, () => Opt.AutoHideDurationMs, v => Opt.AutoHideDurationMs = v, v => v == 0 ? L.T("Instant") : $"{v}ms");
@@ -330,6 +332,9 @@ public sealed unsafe class SettingsWindow : WindowBase
         _ui.Page = 6;
         var version = typeof(App).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "";
         float y = 60;
+        // The logo, drawn from the exe's own icon resource (WM_DRAWITEM, IdLogo).
+        _ui.Add("STATIC", null, Ui.SS_OWNERDRAW, X, y, 96, 96, IdLogo);
+        y += 108;
         _ui.Label($"NETDock {version}", X, y, Wide, 24); y += 28;
         _ui.Label(L.T("A RocketDock-style dock for Windows. Native .NET 11 AOT, drawn with Direct2D."), X, y, Wide, 20); y += 40;
         _ui.Label(L.T("Inspired by RocketDock (Punk Software) and Aero Dock (MIT, Ryan Panda)."), X, y, Wide, 20); y += 24;
@@ -360,6 +365,7 @@ public sealed unsafe class SettingsWindow : WindowBase
         }
         Win32.DestroyWindow(Hwnd);
         foreach (var b in _swatchBrushes.Values) Win32.DeleteObject(b);
+        if (_logo != 0) { Win32.DestroyIcon(_logo); _logo = 0; }
         _swatchBrushes.Clear();
     }
 
@@ -412,8 +418,18 @@ public sealed unsafe class SettingsWindow : WindowBase
                 ((MEASUREITEMSTRUCT*)l)->itemHeight = (uint)(64 * (_ui?.Scale ?? 1));
                 return 1;
             case Ui.WM_DRAWITEM:
-                DrawNavItem((DRAWITEMSTRUCT*)l);
+            {
+                var d = (DRAWITEMSTRUCT*)l;
+                if (d->CtlID == IdLogo)
+                {
+                    var px = d->rcItem.Right - d->rcItem.Left;
+                    if (_logo == 0) _logo = App.LoadAppIcon(px);
+                    Ui.FillRect(d->hDC, &d->rcItem, _whiteBrush);
+                    if (_logo != 0) Ui.DrawIconEx(d->hDC, d->rcItem.Left, d->rcItem.Top, _logo, px, px, 0, 0, 3);
+                }
+                else DrawNavItem(d);
                 return 1;
+            }
             case Win32.WM_KEYDOWN when w == 0x1B:
             case Win32.WM_CLOSE:
                 Finish(false);

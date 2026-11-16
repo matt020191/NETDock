@@ -13,7 +13,7 @@ namespace NETDock.App;
 /// </summary>
 public sealed unsafe partial class DockWindow : WindowBase
 {
-    private const nuint AnimTimer = 1, RunningTimer = 2, RunningDebounce = 3, HideTimer = 4, PopTimer = 5, PreviewTimer = 6;
+    private const nuint AnimTimer = 1, RunningTimer = 2, RunningDebounce = 3, HideTimer = 4, PopTimer = 5, PreviewTimer = 6, VolumeTimer = 7;
     private readonly App _app;
     private LayeredSurface _surface = null!;
     private nint _labelFormat, _shelfBrush;
@@ -186,6 +186,55 @@ public sealed unsafe partial class DockWindow : WindowBase
         _app.Preview.Show(item, wins, r, Opt.Edge, _scale);
         Render(); // drop the hover label
     }
+
+    // ---------------------------------------------------------------- per-app volume
+
+    private string? _volumeItem;   // item id whose volume was just changed (label shows the level)
+    private float _volumeLevel;
+    private bool _volumeMuted;
+    private int _wheelRemainder;
+
+    /// <summary>The audio sessions of an item's app (empty when it isn't playing or has no audio). Dispose it.</summary>
+    public AppAudio.Sessions AudioFor(DockItem item) => AppAudio.For(RunningApps.KeysFor(item, _app.Tokens));
+
+    /// <summary>Scroll over a running app's icon: its volume in 5 % steps, shown in the label for a moment.</summary>
+    private void OnWheel(int delta, int screenX, int screenY)
+    {
+        if (!Opt.ScrollVolume) return;
+        var (u, v) = ToEdge(screenX - _winX, screenY - _winY); // WM_MOUSEWHEEL has screen coordinates
+        var hit = HitTest(u, v);
+        if (hit < 0 || Items[hit].Kind == ItemKind.Separator) return;
+        _wheelRemainder += delta;
+        var notches = _wheelRemainder / 120; // WHEEL_DELTA; high-resolution wheels send smaller steps
+        if (notches == 0) return;
+        _wheelRemainder -= notches * 120;
+        using var audio = AudioFor(Items[hit]);
+        if (!audio.Any) { ShowVolume(Items[hit], -1, false); return; }
+        if (audio.Muted && notches > 0) audio.Muted = false;
+        var level = VolumeSteps.Step(audio.Volume, notches);
+        audio.Volume = level;
+        ShowVolume(Items[hit], level, audio.Muted);
+    }
+
+    public void ToggleMute(DockItem item)
+    {
+        using var audio = AudioFor(item);
+        if (!audio.Any) return;
+        audio.Muted = !audio.Muted;
+        ShowVolume(item, audio.Volume, audio.Muted);
+    }
+
+    /// <summary>level &lt; 0 = the app has no audio playing.</summary>
+    private void ShowVolume(DockItem item, float level, bool muted)
+    {
+        _volumeItem = item.Id;
+        _volumeLevel = level;
+        _volumeMuted = muted;
+        Win32.SetTimer(Hwnd, VolumeTimer, 1500, 0);
+        Render();
+    }
+
+    private bool VolumeShownFor(int i) => _volumeItem is not null && i >= 0 && i < Items.Count && Items[i].Id == _volumeItem;
 
     /// <summary>Re-read minimised windows now (after the option changes).</summary>
     public void RefreshMinimized() => RefreshRunning();
@@ -579,7 +628,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         }
 
         // Label for the hovered icon.
-        if (Opt.ShowLabels && _hover >= 0 && _hover < n && _dragging < 0 && _hide < 0.01 && Items[_hover].Kind != ItemKind.Separator && _app.Preview.Item is null)
+        if ((Opt.ShowLabels || VolumeShownFor(_hover)) && _hover >= 0 && _hover < n && _dragging < 0 && _hide < 0.01 && Items[_hover].Kind != ItemKind.Separator && _app.Preview.Item is null)
             DrawLabel(_hover, off);
 
         s.EndAndPresent(Hwnd, _winX, _winY);
@@ -587,7 +636,11 @@ public sealed unsafe partial class DockWindow : WindowBase
 
     private void DrawLabel(int i, float off)
     {
-        var text = Items[i].Name;
+        var volume = VolumeShownFor(i);
+        var text = !volume ? Items[i].Name
+            : _volumeLevel < 0 ? L.T("No sound playing")
+            : _volumeMuted ? L.F("Muted ({0}%)", (int)MathF.Round(_volumeLevel * 100))
+            : L.F("Volume {0}%", (int)MathF.Round(_volumeLevel * 100));
         if (string.IsNullOrWhiteSpace(text)) return;
         var w = D2D.MeasureWidth(text, _labelFormat) + 20 * _scale;
         var c = _u0[i] + _len[i] / 2;
@@ -611,6 +664,17 @@ public sealed unsafe partial class DockWindow : WindowBase
         {
             _surface.FillRoundRect(r, _labelH / 2, bg);
             _surface.DrawRoundRect(r, _labelH / 2, new D2DColor(1, 1, 1, 0.18f * bg.A), 1);
+        }
+        if (volume && _volumeLevel >= 0)
+        {
+            // Fill the pill up to the level, like a slider.
+            var fill = new D2DRect(r.L, r.T, r.L + (r.R - r.L) * _volumeLevel, r.B);
+            if (fill.R - fill.L > 1)
+            {
+                _surface.PushClip(new D2DRect(r.L + _labelH / 4, r.T, r.R - _labelH / 4, r.B));
+                _surface.FillRect(fill, _volumeMuted ? new D2DColor(0.85f, 0.3f, 0.3f, 0.45f) : new D2DColor(0.35f, 0.75f, 1f, 0.45f));
+                _surface.PopClip();
+            }
         }
         var shadowC = D2DColor.Parse(Opt.LabelShadowColor, 0x99000000);
         if (shadowC.A > 0)
@@ -1037,6 +1101,9 @@ public sealed unsafe partial class DockWindow : WindowBase
             case Win32.WM_LBUTTONUP:
                 OnButtonUp(Win32.LoWord(l), Win32.HiWord(l));
                 return 0;
+            case Win32.WM_MOUSEWHEEL:
+                OnWheel((short)((w >> 16) & 0xFFFF), Win32.LoWord(l), Win32.HiWord(l));
+                return 0;
             case Win32.WM_MBUTTONUP:
             {
                 var (u, v) = ToEdge(Win32.LoWord(l), Win32.HiWord(l));
@@ -1060,6 +1127,11 @@ public sealed unsafe partial class DockWindow : WindowBase
                     case RunningTimer: RefreshRunning(); break;
                     case RunningDebounce: Win32.KillTimer(Hwnd, RunningDebounce); RefreshRunning(); break;
                     case PopTimer: PollPopUp(); break;
+                    case VolumeTimer:
+                        Win32.KillTimer(Hwnd, VolumeTimer);
+                        _volumeItem = null;
+                        Render();
+                        break;
                     case PreviewTimer:
                         Win32.KillTimer(Hwnd, PreviewTimer);
                         ShowPreview(_hover);

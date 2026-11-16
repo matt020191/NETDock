@@ -457,3 +457,17 @@ public class SearchTests
         Assert.Empty(SearchRanker.Rank("zzz", Entries));
     }
 }
+
+public class VolumeStepTests
+{
+    [Theory]
+    [InlineData(0.37f, 1, 0.40f)]
+    [InlineData(0.37f, -1, 0.35f)]
+    [InlineData(0.40f, 1, 0.45f)]
+    [InlineData(0.40f, -1, 0.35f)]
+    [InlineData(0.98f, 1, 1.00f)]
+    [InlineData(0.02f, -1, 0.00f)]
+    [InlineData(0.50f, 3, 0.65f)]
+    public void Steps_snap_to_five_percent(float from, int notches, float to) =>
+        Assert.Equal(to, VolumeSteps.Step(from, notches), 3);
+}

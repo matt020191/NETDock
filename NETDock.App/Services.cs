@@ -307,6 +307,8 @@ public static unsafe partial class RunningApps
         finally { ((delegate* unmanaged<nint, uint>)(*(nint**)store)[2])(store); }
     }
 
+    public static string? PathOfProcess(uint pid) => ProcessPath(pid);
+
     private static string? ProcessPath(uint pid)
     {
         var h = Win32.OpenProcess(0x1000 /* QUERY_LIMITED_INFORMATION */, false, pid);

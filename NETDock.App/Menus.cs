@@ -52,6 +52,11 @@ public static unsafe class Menus
         {
             Add(m, 10, item.Kind == ItemKind.Stack ? L.T("Open folder") : L.T("Open"));
             if (item.Kind != ItemKind.Stack) Add(m, 11, L.T("Run as administrator"));
+            if (item.Kind != ItemKind.Stack && !SpecialItems.Is(item))
+            {
+                using var audio = dock.AudioFor(item);
+                if (audio.Any) Add(m, 18, audio.Muted ? L.T("Unmute") : L.T("Mute"));
+            }
             if (RecycleBin.Is(item)) Add(m, 17, L.T("Empty Recycle Bin"), enabled: RecycleBinService.IsFull);
             else Add(m, 12, L.T("Open file location"));
             if (item.Kind == ItemKind.Stack)
@@ -263,6 +268,7 @@ public static unsafe class Menus
             case 15 when item is not null: dock.ForgetIcon(item); item.Icon = null; break;
             case 16 when item is not null: app.Settings.Items.Remove(item); break;
             case 17: RecycleBinService.Empty(dock.Hwnd); return;
+            case 18 when item is not null: dock.ToggleMute(item); return;
             case 43: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Settings)); break;
             case 45: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Search)); break;
             case 44: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Quit)); break;
