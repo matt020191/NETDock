@@ -224,8 +224,11 @@ public static unsafe class ShellFiles
     }
 }
 
-/// <summary>Top-level windows grouped by process image, for running indicators and click-to-activate.</summary>
-public static unsafe class RunningApps
+/// <summary>
+/// Top-level windows grouped by match key (see <see cref="RunningKeys"/>: exe path, launcher, AppUserModelID),
+/// for running indicators, click-to-activate and previews.
+/// </summary>
+public static unsafe partial class RunningApps
 {
     private static Dictionary<string, List<nint>> _scratch = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<uint, string?> PidPaths = [];
@@ -250,9 +253,58 @@ public static unsafe class RunningApps
         Win32.GetWindowThreadProcessId(hwnd, &pid);
         if (!PidPaths.TryGetValue(pid, out var path)) PidPaths[pid] = path = ProcessPath(pid);
         if (path is null) return 1;
-        if (!_scratch.TryGetValue(path, out var list)) _scratch[path] = list = [];
-        list.Add(hwnd);
+        foreach (var key in RunningKeys.ForProcess(path)) Add(key, hwnd);
+        if (AppUserModelId(hwnd) is { } id) Add(RunningKeys.Aumid(id), hwnd);
         return 1;
+    }
+
+    private static void Add(string key, nint hwnd)
+    {
+        if (!_scratch.TryGetValue(key, out var list)) _scratch[key] = list = [];
+        list.Add(hwnd);
+    }
+
+    /// <summary>All match keys of one window (for attention requests).</summary>
+    public static List<string> KeysOfWindow(nint hwnd)
+    {
+        var keys = PathOf(hwnd) is { } p ? RunningKeys.ForProcess(p) : [];
+        if (AppUserModelId(hwnd) is { } id) keys.Add(RunningKeys.Aumid(id));
+        return keys;
+    }
+
+    // ---- AppUserModelID of a window (Store apps, and desktop apps that set one)
+
+    private static readonly Guid IID_IPropertyStore = new("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99");
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct PROPERTYKEY { public Guid fmtid; public uint pid; }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct PROPVARIANT { public ushort vt, r1, r2, r3; public nint p, p2; }
+
+    [System.Runtime.InteropServices.LibraryImport("shell32.dll")]
+    private static partial int SHGetPropertyStoreForWindow(nint hwnd, Guid* riid, nint* store);
+    [System.Runtime.InteropServices.LibraryImport("ole32.dll")]
+    private static partial int PropVariantClear(PROPVARIANT* pv);
+
+    public static string? AppUserModelId(nint hwnd)
+    {
+        nint store;
+        var iid = IID_IPropertyStore;
+        if (SHGetPropertyStoreForWindow(hwnd, &iid, &store) != 0 || store == 0) return null;
+        try
+        {
+            var key = new PROPERTYKEY { fmtid = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), pid = 5 }; // PKEY_AppUserModel_ID
+            var pv = default(PROPVARIANT);
+            // IPropertyStore: QueryInterface, AddRef, Release, GetCount, GetAt, GetValue (5)
+            var hr = ((delegate* unmanaged<nint, PROPERTYKEY*, PROPVARIANT*, int>)(*(nint**)store)[5])(store, &key, &pv);
+            try
+            {
+                return hr == 0 && pv.vt == 31 /* VT_LPWSTR */ && pv.p != 0 ? new string((char*)pv.p) is { Length: > 0 } s ? s : null : null;
+            }
+            finally { PropVariantClear(&pv); }
+        }
+        finally { ((delegate* unmanaged<nint, uint>)(*(nint**)store)[2])(store); }
     }
 
     private static string? ProcessPath(uint pid)
@@ -299,12 +351,12 @@ public static unsafe class RunningApps
         Win32.SetForegroundWindow(hwnd);
     }
 
-    /// <summary>The exe an item would run, for matching against running windows.</summary>
-    public static string? ExeFor(DockItem item, PathTokens tokens)
+    /// <summary>The keys an item matches running windows by (see <see cref="RunningKeys"/>).</summary>
+    public static List<string> KeysFor(DockItem item, PathTokens tokens)
     {
-        var t = item.Kind == ItemKind.Shortcut ? item.Fallback?.Target : item.Target;
-        t = tokens.Expand(t);
-        return t is not null && t.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? t : null;
+        if (item.Kind is ItemKind.Separator or ItemKind.Stack || SpecialItems.Is(item)) return [];
+        var (target, args) = item.Kind == ItemKind.Shortcut ? (item.Fallback?.Target, item.Fallback?.Arguments) : (item.Target, item.Arguments);
+        return RunningKeys.ForItem(tokens.Expand(target), args);
     }
 }
 

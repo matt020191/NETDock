@@ -382,3 +382,39 @@ public class PreviewLayoutTests
         Assert.Equal((100, 50), PreviewLayout.Fit(100, 50, 200, 124));
     }
 }
+
+public class RunningKeyTests
+{
+    private const string Root = @"C:\Users\me\AppData\Local\Discord";
+
+    [Fact]
+    public void Squirrel_launcher_icon_matches_the_versioned_app_exe()
+    {
+        var icon = RunningKeys.ForItem(Root + @"\Update.exe", "--processStart Discord.exe");
+        var proc = RunningKeys.ForProcess(Root + @"\app-1.0.9213\Discord.exe");
+        Assert.Contains(icon, k => proc.Contains(k, StringComparer.OrdinalIgnoreCase));
+        Assert.DoesNotContain(icon, k => RunningKeys.ForProcess(@"C:\Other\app-1.0\Discord.exe").Contains(k, StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Theory]
+    [InlineData("--processStart Discord.exe", "Discord.exe")]
+    [InlineData("--processStart \"Slack.exe\" --process-start-args \"--x\"", "Slack.exe")]
+    [InlineData("--processStart=Teams.exe", "Teams.exe")]
+    [InlineData("--other", null)]
+    public void Reads_processStart(string args, string? exe) => Assert.Equal(exe, RunningKeys.ProcessStartArgument(args));
+
+    [Fact]
+    public void Store_apps_match_by_app_user_model_id()
+    {
+        var keys = RunningKeys.ForItem(@"shell:AppsFolder\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App", null);
+        Assert.Equal(["aumid:Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"], keys);
+        Assert.Equal(keys[0], RunningKeys.Aumid("Microsoft.WindowsCalculator_8wekyb3d8bbwe!App"));
+    }
+
+    [Fact]
+    public void Plain_exes_match_by_path_and_documents_do_not_match()
+    {
+        Assert.Equal([@"C:\x\a.exe"], RunningKeys.ForItem(@"C:\x\a.exe", null));
+        Assert.Empty(RunningKeys.ForItem(@"C:\x\notes.txt", null));
+    }
+}

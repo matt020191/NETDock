@@ -91,12 +91,14 @@ public sealed unsafe partial class DockWindow : WindowBase
     {
         var before = _unpinned.Select(i => i.Target).ToList();
         if (!Opt.ShowRunningApps) { _unpinned.Clear(); return before.Count > 0; }
-        var pinnedExes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // Windows already shown by a pinned icon (by any key: exe, launcher, AUMID) don't make an extra icon.
+        var pinnedWindows = new HashSet<nint>();
         foreach (var item in Pinned)
-            if (RunningApps.ExeFor(item, _app.Tokens) is { } exe) pinnedExes.Add(exe);
+            if (WindowsFor(item) is { } w) pinnedWindows.UnionWith(w);
         var self = Environment.ProcessPath;
-        var running = _running.Keys.Where(exe => !pinnedExes.Contains(exe) && !RunningApps.IsShellHost(exe)
-            && !string.Equals(exe, self, StringComparison.OrdinalIgnoreCase)).ToList();
+        var running = _running.Where(kv => RunningKeys.IsPath(kv.Key) && !RunningApps.IsShellHost(kv.Key)
+                && !string.Equals(kv.Key, self, StringComparison.OrdinalIgnoreCase) && kv.Value.Any(h => !pinnedWindows.Contains(h)))
+            .Select(kv => kv.Key).ToList();
         _unpinned.RemoveAll(i => !running.Contains(i.Target, StringComparer.OrdinalIgnoreCase));
         foreach (var exe in running)
             if (!_unpinned.Any(i => string.Equals(i.Target, exe, StringComparison.OrdinalIgnoreCase)))
@@ -127,7 +129,7 @@ public sealed unsafe partial class DockWindow : WindowBase
         if (Opt.MinimizeToDock)
             foreach (var wins in _running.Values)
                 foreach (var h in wins)
-                    if (Win32.IsIconic(h)) now.Add(h);
+                    if (Win32.IsIconic(h) && !now.Contains(h)) now.Add(h); // a window is listed under each of its keys
         var before = _minimized.Select(m => m.Hwnd).ToList();
         _minimized.RemoveAll(m => !now.Contains(m.Hwnd));
         foreach (var h in now)
@@ -649,12 +651,13 @@ public sealed unsafe partial class DockWindow : WindowBase
     /// <summary>HSHELL_FLASH: a window wants attention; animate the icon of its app until it is activated.</summary>
     private void OnFlash(nint hwnd)
     {
-        if (Opt.AttentionEffect == IconEffect.None || RunningApps.PathOf(hwnd) is not { } exe) return;
+        if (Opt.AttentionEffect == IconEffect.None) return;
+        var windowKeys = RunningApps.KeysOfWindow(hwnd);
         foreach (var item in Items)
         {
-            if (RunningApps.ExeFor(item, _app.Tokens) is not { } itemExe || !string.Equals(itemExe, exe, StringComparison.OrdinalIgnoreCase)) continue;
+            if (RunningApps.KeysFor(item, _app.Tokens).FirstOrDefault(k => windowKeys.Contains(k, StringComparer.OrdinalIgnoreCase)) is not { } key) continue;
             if (_attention.ContainsKey(item.Id)) return;
-            _attention[item.Id] = exe;
+            _attention[item.Id] = key;
             StartEffect(item, Opt.AttentionEffect);
             return;
         }
@@ -664,9 +667,10 @@ public sealed unsafe partial class DockWindow : WindowBase
     private void OnActivated(nint hwnd)
     {
         if (_attention.Count == 0) return;
-        var exe = hwnd == 0 ? null : RunningApps.PathOf(hwnd);
-        foreach (var (id, attExe) in _attention.ToList())
-            if (exe is not null && string.Equals(attExe, exe, StringComparison.OrdinalIgnoreCase)) _attention.Remove(id);
+        if (hwnd == 0) return;
+        var keys = RunningApps.KeysOfWindow(hwnd);
+        foreach (var (id, key) in _attention.ToList())
+            if (keys.Contains(key, StringComparer.OrdinalIgnoreCase)) _attention.Remove(id);
     }
 
     private int IconPixelSize()
@@ -760,10 +764,21 @@ public sealed unsafe partial class DockWindow : WindowBase
         Render();
     }
 
-    private bool IsRunning(DockItem item) => RunningApps.ExeFor(item, _app.Tokens) is { } exe && _running.ContainsKey(exe);
+    private bool IsRunning(DockItem item) => WindowsFor(item) is { Count: > 0 };
 
     private List<nint>? WindowsFor(DockItem item) =>
-        RunningApps.ExeFor(item, _app.Tokens) is { } exe && _running.TryGetValue(exe, out var w) ? w : null;
+        WindowsByKeys(RunningApps.KeysFor(item, _app.Tokens));
+
+    /// <summary>Windows matching any of the keys, without duplicates, in first-seen order.</summary>
+    private List<nint>? WindowsByKeys(List<string> keys)
+    {
+        List<nint>? found = null;
+        foreach (var k in keys)
+            if (_running.TryGetValue(k, out var w))
+                foreach (var h in w)
+                    if (!(found ??= []).Contains(h)) found.Add(h);
+        return found;
+    }
 
     // ---------------------------------------------------------------- input
 
