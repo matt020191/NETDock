@@ -620,6 +620,11 @@ public sealed unsafe partial class DockWindow : WindowBase
         {
             case ItemKind.Separator:
                 return;
+            case ItemKind.App when SpecialItems.Is(item):
+                StartEffect(item, Opt.ClickEffect);
+                if (string.Equals(item.Target, SpecialItems.Settings, StringComparison.OrdinalIgnoreCase)) SettingsWindow.Show(_app);
+                else if (string.Equals(item.Target, SpecialItems.Quit, StringComparison.OrdinalIgnoreCase)) Close();
+                return;
             case ItemKind.Stack:
                 if (item.Stack?.View == StackView.Open) Launcher.Open(_app.Tokens.Expand(item.Target)!);
                 else _app.ToggleStack(item, IconScreenRect(index));

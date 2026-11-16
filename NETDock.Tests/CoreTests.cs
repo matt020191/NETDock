@@ -281,3 +281,16 @@ public class IconEffectTests
     [Fact]
     public void None_never_moves() => Assert.Equal(EffectFrame.Rest, IconEffects.Sample(IconEffect.None, 0.2));
 }
+
+public class SpecialItemTests
+{
+    [Fact]
+    public void Special_items_are_recognised_and_never_take_drops()
+    {
+        var s = SpecialItems.Create(SpecialItems.Settings);
+        Assert.True(SpecialItems.Is(s));
+        Assert.False(SpecialItems.Is(new DockItem { Target = @"C:\x.exe" }));
+        Assert.Equal(DropAction.Insert, DropRules.Decide(s, 0.5));
+        Assert.Equal(DropAction.Insert, DropRules.Decide(SpecialItems.Create(SpecialItems.Quit), 0.5));
+    }
+}

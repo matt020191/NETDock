@@ -27,7 +27,7 @@ public static class DropRules
         if (RecycleBin.Is(item)) return DropAction.Recycle;
         if (item.Kind == ItemKind.Stack) return DropAction.CopyInto;
         // Only real programs take files; shell folders like This PC (::{...}) don't.
-        return item.Target.StartsWith("::", StringComparison.Ordinal) ? DropAction.Insert : DropAction.OpenWith;
+        return item.Target.StartsWith("::", StringComparison.Ordinal) || SpecialItems.Is(item) ? DropAction.Insert : DropAction.OpenWith;
     }
 
     /// <summary>Arguments for opening dropped paths with an app: its own arguments, then each path quoted.</summary>

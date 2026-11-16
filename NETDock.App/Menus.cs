@@ -95,6 +95,9 @@ public static unsafe class Menus
         Add(add, 42, "File or program...");
         Add(add, 41, "Folder stack...");
         Add(add, 40, "Separator");
+        Sep(add);
+        Add(add, 43, "Dock Settings icon");
+        Add(add, 44, "Quit icon");
 
         var edge = Sub("Position");
         Add(edge, 50, "Bottom", o.Edge == DockEdge.Bottom);
@@ -233,6 +236,8 @@ public static unsafe class Menus
             case 15 when item is not null: dock.ForgetIcon(item); item.Icon = null; break;
             case 16 when item is not null: app.Settings.Items.Remove(item); break;
             case 17: RecycleBinService.Empty(dock.Hwnd); return;
+            case 43: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Settings)); break;
+            case 44: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Quit)); break;
             case 40: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), new DockItem { Kind = ItemKind.Separator }); break;
             case 41:
                 if (Dialogs.PickFolder(dock.Hwnd, "Folder to show as a stack") is { } folder && ItemFactory.FromPath(folder, app.Tokens) is { } s)
