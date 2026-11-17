@@ -147,6 +147,44 @@ public sealed unsafe partial class SearchOverlay : WindowBase
         else Launcher.Open(e.Target);
     }
 
+    /// <summary>Right-click on a result: Open, Run as administrator, Pin to dock (apps and files not already on it).</summary>
+    private void ShowRowMenu(int index)
+    {
+        _sel = index;
+        Ui.InvalidateRect(Hwnd, null, false);
+        var e = _results[index];
+        var m = Win32.CreatePopupMenu();
+        Win32.AppendMenu(m, 0, 1, L.T("Open"));
+        if (e.Kind != SearchKind.Dock)
+        {
+            Win32.AppendMenu(m, 0, 2, L.T("Run as administrator"));
+            Win32.AppendMenu(m, Win32.MF_SEPARATOR, 0, null);
+            Win32.AppendMenu(m, 0, 3, L.T("Pin to dock"));
+        }
+        POINT p;
+        Win32.GetCursorPos(&p);
+        var cmd = Win32.TrackPopupMenuEx(m, Win32.TPM_RETURNCMD | Win32.TPM_RIGHTBUTTON, p.X, p.Y, Hwnd, 0);
+        Win32.DestroyMenu(m);
+        switch (cmd)
+        {
+            case 1: Open(index, false); break;
+            case 2: Open(index, true); break;
+            case 3: Pin(e); break;
+        }
+    }
+
+    /// <summary>Add a search result to the end of the dock (a Store app as shell:AppsFolder\AUMID).</summary>
+    private void Pin(SearchEntry e)
+    {
+        Hide();
+        var item = e.Target.StartsWith(RunningKeys.AppsFolder, StringComparison.OrdinalIgnoreCase)
+            ? new DockItem { Kind = ItemKind.App, Name = e.Name, Target = e.Target }
+            : ItemFactory.FromPath(e.Target, _app.Tokens);
+        if (item is null) return;
+        if (item.Kind == ItemKind.App && item.Name.Length == 0) item.Name = e.Name;
+        _app.Dock.InsertItem(int.MaxValue, item);
+    }
+
     private RECT RowRect(int i)
     {
         var top = _pad + _editH + S(10) + S(3) + i * _rowH;
@@ -169,7 +207,7 @@ public sealed unsafe partial class SearchOverlay : WindowBase
         {
             key = $"search|{target}|{size}";
             var t = target ?? "";
-            load = () => Shell.ShellImage(t, size);
+            load = () => Shell.AppImage(t, size);
         }
         if (_icons.TryGetValue(key, out var h)) return h;
         if (_app.Icons.Get(key, load) is not { } img) return 0;
@@ -204,6 +242,10 @@ public sealed unsafe partial class SearchOverlay : WindowBase
                     if (RowRect(i).Contains(Win32.LoWord(l), y) && i != _sel) { _sel = i; Ui.InvalidateRect(Hwnd, null, false); }
                 return 0;
             }
+            case Win32.WM_RBUTTONUP:
+                for (var i = 0; i < _results.Count; i++)
+                    if (RowRect(i).Contains(Win32.LoWord(l), Win32.HiWord(l))) { ShowRowMenu(i); break; }
+                return 0;
             case Win32.WM_LBUTTONUP:
                 for (var i = 0; i < _results.Count; i++)
                     if (RowRect(i).Contains(Win32.LoWord(l), Win32.HiWord(l))) { Open(i, false); break; }

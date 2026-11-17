@@ -7,7 +7,7 @@ public sealed record IconImage(byte[] Bgra, int Width, int Height);
 public sealed record ShortcutInfo(string Target, string? Arguments, string? WorkingDirectory, string? IconFile, int IconIndex);
 
 /// <summary>Shell COM calls (images, shortcuts). Must run on a thread that called CoInitializeEx.</summary>
-public static unsafe class Shell
+public static unsafe partial class Shell
 {
     private static readonly Guid IID_IShellItemImageFactory = new("bcc18b79-ba16-442f-80c4-8a59c30c463b");
     private static readonly Guid CLSID_ShellLink = new("00021401-0000-0000-C000-000000000046");
@@ -128,6 +128,7 @@ public static unsafe class Shell
             buf[0] = '\0';
             ((delegate* unmanaged<nint, char*, int, WIN32_FIND_DATAW*, uint, int>)v[3])(link, buf, 1024, null, 4 /* SLGP_RAWPATH */);
             var target = Environment.ExpandEnvironmentVariables(new string(buf));
+            if (target.Length == 0) target = AppsFolderTarget(link) ?? "";
             var wd = Get(8);
             var args = Get(10);
             int iconIndex;
@@ -145,4 +146,96 @@ public static unsafe class Shell
             Com.Release(ref link);
         }
     }
+
+    /// <summary>
+    /// The image for an app, file or shell item: a Store app's own package logo when there is one (the shell's image
+    /// for some packages is a blank tile frame), else what Explorer shows.
+    /// </summary>
+    public static IconImage? AppImage(string target, int size) =>
+        (StoreAppLogoFile(target, size) is { } logo ? ShellImage(logo, size, preferThumbnail: true) : null)
+        ?? Unframe(ShellImage(target, size));
+
+    /// <summary>A small icon Windows placed in a big tile frame: just the icon (scaled up when drawn). See <see cref="NETDock.Core.JumboFrame"/>.</summary>
+    private static IconImage? Unframe(IconImage? img)
+    {
+        if (img is null || NETDock.Core.JumboFrame.Inner(img.Bgra, img.Width, img.Height) is not { } r) return img;
+        return new IconImage(NETDock.Core.JumboFrame.Crop(img.Bgra, img.Width, r.X, r.Y, r.Size), r.Size, r.Size);
+    }
+
+    /// <summary>
+    /// A Store app's own logo file at <paramref name="size"/> (see <see cref="NETDock.Core.StoreAppLogo"/>), or null for
+    /// anything that isn't an installed packaged app.
+    /// </summary>
+    public static string? StoreAppLogoFile(string target, int size)
+    {
+        if (NETDock.Core.StoreAppLogo.SplitAumid(target) is not { } id || PackagePath(id.Family) is not { } root) return null;
+        try
+        {
+            var manifest = File.ReadAllText(Path.Combine(root, "AppxManifest.xml"));
+            foreach (var logo in NETDock.Core.StoreAppLogo.LogoNames(manifest, id.AppId))
+            {
+                var dir = Path.GetDirectoryName(Path.Combine(root, logo))!;
+                if (!Directory.Exists(dir)) continue;
+                if (NETDock.Core.StoreAppLogo.Pick(logo, Directory.EnumerateFiles(dir), size) is { } file) return file;
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        return null;
+    }
+
+    /// <summary>Install folder of the newest installed package in a family, or null.</summary>
+    private static string? PackagePath(string family)
+    {
+        uint count = 0, bufLen = 0;
+        // ERROR_INSUFFICIENT_BUFFER (122) with the sizes filled in; 0 with count 0 means not installed.
+        if (FindPackagesByPackageFamily(family, 0x10 /* PACKAGE_FILTER_HEAD */, &count, null, &bufLen, null, null) != 122 || count == 0) return null;
+        var names = new char*[count];
+        var buf = new char[bufLen];
+        fixed (char** n = names)
+        fixed (char* b = buf)
+        {
+            if (FindPackagesByPackageFamily(family, 0x10, &count, n, &bufLen, b, null) != 0 || count == 0) return null;
+            uint len = 0;
+            var full = n[0];
+            if (GetPackagePathByFullName(full, &len, null) != 122 || len == 0) return null;
+            var path = new char[len];
+            fixed (char* p = path)
+                return GetPackagePathByFullName(full, &len, p) == 0 ? new string(p) : null;
+        }
+    }
+
+    [LibraryImport("kernel32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial int FindPackagesByPackageFamily(string family, uint flags, uint* count, char** fullNames, uint* bufferLength, char* buffer, uint* properties);
+
+    [LibraryImport("kernel32.dll")]
+    private static partial int GetPackagePathByFullName(char* fullName, uint* length, char* path);
+
+    private const string AppsFolderParsing = "::{4234D49B-0245-4DF3-B780-3893943456E1}\\";
+
+    /// <summary>
+    /// A shortcut to a Store/MSIX app has no file path, only an ID list into the Apps folder:
+    /// return it as <c>shell:AppsFolder\&lt;AUMID&gt;</c>, or null when it points anywhere else.
+    /// </summary>
+    private static string? AppsFolderTarget(nint link)
+    {
+        nint pidl = 0, name = 0;
+        try
+        {
+            if (((delegate* unmanaged<nint, nint*, int>)Com.Vt(link)[4])(link, &pidl) < 0 || pidl == 0) return null; // GetIDList
+            if (SHGetNameFromIDList(pidl, unchecked((int)0x80028000) /* SIGDN_DESKTOPABSOLUTEPARSING */, &name) < 0 || name == 0) return null;
+            var parsing = new string((char*)name);
+            return parsing.StartsWith(AppsFolderParsing, StringComparison.OrdinalIgnoreCase) && parsing.Length > AppsFolderParsing.Length
+                ? NETDock.Core.RunningKeys.AppsFolder + parsing[AppsFolderParsing.Length..]
+                : null;
+        }
+        finally
+        {
+            if (name != 0) Win32.CoTaskMemFree(name);
+            if (pidl != 0) Win32.CoTaskMemFree(pidl);
+        }
+    }
+
+    [LibraryImport("shell32.dll")]
+    private static partial int SHGetNameFromIDList(nint pidl, int sigdn, nint* name);
 }

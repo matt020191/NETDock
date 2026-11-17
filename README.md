@@ -61,6 +61,7 @@ dotnet publish NETDock.App -c Release -o out/NETDock
 - Drag icons to reorder them. Drag one off the dock to remove it (*Options → Lock icons* prevents this).
 - Click a running app to switch to it; click it again to minimise it. Shift+click or middle-click starts a new copy. Ctrl+Shift+click runs it as administrator.
 - Right-click for everything else: Properties, Change icon, stack view/sort/columns, position, sizes and Settings.
+- Search (Alt+Space) finds installed apps, including Store apps like Calculator. Right-click a result → *Pin to dock*. Dropping a shortcut to a Store app pins the app itself, so the shortcut can be deleted afterwards.
 - `NETDock.exe --import-rocketdock` imports your RocketDock setup without asking.
 - `NETDock.exe --mode 2` (or `--mode next`) switches the running dock to another mode: a set of icons made under right-click > Mode, with an optional saved window layout.
 

@@ -81,7 +81,7 @@ public sealed class IconService
             }
             if (item.Kind == ItemKind.Shortcut && !File.Exists(target) && item.Fallback is { } fb)
                 target = tokens.Expand(fb.Target) ?? target;
-            return Shell.ShellImage(target, size);
+            return Shell.AppImage(target, size);
         };
     }
 
@@ -382,6 +382,13 @@ public static class ItemFactory
         if (!File.Exists(path)) return null;
         var ext = Path.GetExtension(path).ToLowerInvariant();
         var item = new DockItem { Name = Path.GetFileNameWithoutExtension(path), Target = tokens.Tokenize(path)! };
+        if (ext == ".lnk" && Shell.ReadShortcut(path) is { } app && app.Target.StartsWith(RunningKeys.AppsFolder, StringComparison.OrdinalIgnoreCase))
+        {
+            // A shortcut to a Store/MSIX app: pin the app itself, so deleting the shortcut doesn't break the icon.
+            item.Kind = ItemKind.App;
+            item.Target = app.Target;
+            return item;
+        }
         if (ext == ".lnk")
         {
             // Keep the .lnk: launching it lets the shell apply the shortcut's own Start In,
