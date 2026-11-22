@@ -364,6 +364,13 @@ public static unsafe partial class RunningApps
 
 public static class ItemFactory
 {
+    /// <summary>A dropped file, or a virtual shell item ("::{CLSID}", e.g. the Recycle Bin) kept by its parsing name.</summary>
+    public static DockItem? FromDropped(string path, string name, PathTokens tokens)
+    {
+        if (!path.StartsWith("::", StringComparison.Ordinal)) return FromPath(path, tokens);
+        return new DockItem { Kind = ItemKind.App, Name = name, Target = path };
+    }
+
     public static DockItem? FromPath(string path, PathTokens tokens)
     {
         path = path.TrimEnd('\\');

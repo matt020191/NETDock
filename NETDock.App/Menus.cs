@@ -130,6 +130,7 @@ public static unsafe class Menus
         Add(add, 43, L.T("Dock Settings icon"));
         Add(add, 44, L.T("Quit icon"));
         Add(add, 45, L.T("Search icon"));
+        Add(add, 47, L.T("Recycle Bin"), enabled: !app.Settings.Items.Any(RecycleBin.Is));
         Sep(add);
         Add(add, 46, L.T("System corner (clock, battery, network, volume)"));
         Add(add, 64, L.T("Clock"));
@@ -345,6 +346,7 @@ public static unsafe class Menus
                 app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.SystemCorner[cmd - 64]));
                 break;
             case 45: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Search)); break;
+            case 47: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), new DockItem { Kind = ItemKind.App, Name = L.T("Recycle Bin"), Target = RecycleBin.Target }); break;
             case 44: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), SpecialItems.Create(SpecialItems.Quit)); break;
             case 40: app.Settings.Items.Insert(Math.Min(at, app.Settings.Items.Count), new DockItem { Kind = ItemKind.Separator }); break;
             case 41:

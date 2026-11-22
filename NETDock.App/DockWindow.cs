@@ -344,6 +344,14 @@ public sealed unsafe partial class DockWindow : WindowBase
             Win32.WS_POPUP, 0, 0, 1, 1, "NETDock");
         _surface = new LayeredSurface();
         _app.Icons.AddListener(Hwnd);
+        // OLE drops (Explorer, the desktop): files and virtual items such as the Recycle Bin. WM_DROPFILES stays
+        // as the fallback for programs that only do the old-style file drop.
+        DropTarget.Register(Hwnd, (items, screen) =>
+        {
+            var p = screen;
+            Win32.ScreenToClient(Hwnd, &p);
+            OnDropItems(items, p);
+        });
         _shellHookMsg = Win32.RegisterWindowMessage("SHELLHOOK");
         Win32.RegisterShellHookWindow(Hwnd);
         Win32.SetTimer(Hwnd, RunningTimer, 3000, 0); // backstop for windows the hook misses
@@ -645,6 +653,15 @@ public sealed unsafe partial class DockWindow : WindowBase
 
     private int HitTest(float u, float v)
     {
+        // A separator is a 2 px line with a small gap each side: too thin to grab. Give it at least a third of an
+        // icon's width, taken from its neighbours, so it can be dragged, removed by dragging off, or right-clicked.
+        if (v >= _shelfV0 - 1 && v <= _iconV0 + _base + _pad)
+            for (var i = 0; i < Items.Count; i++)
+                if (Items[i].Kind == ItemKind.Separator)
+                {
+                    var half = Math.Max((_len[i] + Gap(i) + Gap(i + 1)) / 2, _base / 6);
+                    if (Math.Abs(u - (_u0[i] + _len[i] / 2)) <= half) return i;
+                }
         for (var i = 0; i < Items.Count; i++)
         {
             if (u < _u0[i] - Gap(i) / 2 || u >= _u0[i] + _len[i] + Gap(i + 1) / 2) continue;
@@ -1140,7 +1157,6 @@ public sealed unsafe partial class DockWindow : WindowBase
     {
         POINT pt;
         DragQueryPoint(hdrop, &pt);
-        var (u, v) = ToEdge(pt.X, pt.Y);
         var count = Win32.DragQueryFile(hdrop, 0xFFFFFFFF, null, 0);
         var paths = new List<string>();
         for (uint i = 0; i < count; i++)
@@ -1154,13 +1170,22 @@ public sealed unsafe partial class DockWindow : WindowBase
                 if (Win32.DragQueryFile(hdrop, i, b, len + 1) == len) paths.Add(new string(b, 0, (int)len));
         }
         Win32.DragFinish(hdrop);
-        if (paths.Count == 0) return;
+        OnDropItems([.. paths.Select(p => new DroppedItem(p, Path.GetFileNameWithoutExtension(p)))], pt);
+    }
+
+    /// <summary>Files or shell items dropped at <paramref name="pt"/> (client coordinates).</summary>
+    private void OnDropItems(List<DroppedItem> dropped, POINT pt)
+    {
+        var (u, v) = ToEdge(pt.X, pt.Y);
+        // Acting on an icon (recycle, copy into, open with) needs real files; virtual items (the Recycle Bin,
+        // This PC …) can only be added to the dock.
+        var paths = dropped.Where(d => !d.Path.StartsWith("::", StringComparison.Ordinal)).Select(d => d.Path).ToList();
 
         // The centre of an icon acts on it; its edges and the gaps add new items (see DropRules).
         var hit = HitTest(u, v);
         var target = hit >= 0 ? Items[hit] : null;
         var across = hit >= 0 && _len[hit] > 0 ? (u - _u0[hit]) / _len[hit] : 0.5f;
-        switch (DropRules.Decide(target, across))
+        switch (paths.Count == dropped.Count ? DropRules.Decide(target, across) : DropAction.Insert)
         {
             case DropAction.Recycle:
                 RecycleBinService.Recycle(Hwnd, paths);
@@ -1184,8 +1209,8 @@ public sealed unsafe partial class DockWindow : WindowBase
         if (hit >= 0) at = across < 0.5f ? hit : hit + 1;
         else at = Items.Count == 0 ? 0 : Math.Clamp(InsertIndex(u) + (u > _u0[^1] + _len[^1] / 2 ? 1 : 0), 0, Items.Count);
         at = Math.Min(at, Pinned.Count); // never among the minimised-window icons
-        foreach (var path in paths)
-            if (ItemFactory.FromPath(path, _app.Tokens) is { } item) Pinned.Insert(Math.Min(at++, Pinned.Count), item);
+        foreach (var d in dropped)
+            if (ItemFactory.FromDropped(d.Path, d.Name, _app.Tokens) is { } item) Pinned.Insert(Math.Min(at++, Pinned.Count), item);
         _app.Save();
         Relayout();
     }
@@ -1341,6 +1366,7 @@ public sealed unsafe partial class DockWindow : WindowBase
                 if (Opt.AccentSync != AccentSource.None) { _accent = Accent.For(Opt.AccentSync); Render(); }
                 return 0;
             case Win32.WM_DESTROY:
+                DropTarget.Revoke(Hwnd);
                 _app.Icons.RemoveListener(Hwnd);
                 Win32.PostQuitMessage(0);
                 return 0;

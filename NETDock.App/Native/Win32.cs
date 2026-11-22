@@ -219,6 +219,7 @@ public static unsafe partial class Win32
     [LibraryImport("shell32.dll", EntryPoint = "Shell_NotifyIconW")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool Shell_NotifyIcon(uint msg, NOTIFYICONDATAW* d);
     [LibraryImport("shell32.dll", EntryPoint = "DragQueryFileW")] public static partial uint DragQueryFile(nint drop, uint i, char* buf, uint size);
     [LibraryImport("shell32.dll")] public static partial void DragFinish(nint drop);
+    [LibraryImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static partial bool ScreenToClient(nint h, POINT* p);
     [LibraryImport("shell32.dll")] public static partial void DragAcceptFiles(nint h, [MarshalAs(UnmanagedType.Bool)] bool accept);
     [LibraryImport("shell32.dll", EntryPoint = "SHCreateItemFromParsingName", StringMarshalling = StringMarshalling.Utf16)]
     public static partial int SHCreateItemFromParsingName(string path, nint bc, Guid* riid, nint* item);
